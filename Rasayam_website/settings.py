@@ -282,3 +282,5 @@ UNFOLD = {
 
 # Prevents WhiteNoise from crashing during local development and testing if an asset is missing
 WHITENOISE_MANIFEST_STRICT = False
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
