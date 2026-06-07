@@ -123,6 +123,7 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    original_cart_items = models.JSONField(default=list, blank=True)
 
     # --- RAZORPAY PAYMENT FIELDS ---
     razorpay_order_id = models.CharField(max_length=100, blank=True, null=True)
@@ -170,10 +171,12 @@ class CartItem(models.Model):
         return f"{self.quantity} x {self.product.name}{size_suffix}"
 
     @property
+    def unit_price(self):
+        return self.price if self.price > 0 else self.product.price
+
+    @property
     def total_item_price(self):
-        # Use stored price if available, otherwise fall back to product price
-        price = self.price if self.price > 0 else self.product.price
-        return price * self.quantity
+        return self.unit_price * self.quantity
     
 
 class Wishlist(models.Model):

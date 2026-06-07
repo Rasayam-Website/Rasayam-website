@@ -284,3 +284,6 @@ UNFOLD = {
 WHITENOISE_MANIFEST_STRICT = False
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+if not DEBUG and (not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET):
+    raise ValueError("Production requires RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET")

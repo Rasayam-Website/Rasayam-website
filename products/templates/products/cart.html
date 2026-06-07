@@ -32,7 +32,7 @@
                             {% if item.selected_size %}
                                 <p style="color: #555; font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px;">Size: {{ item.selected_size }}</p>
                             {% endif %}
-                            <p style="color: var(--gold); font-weight: 700;">₹{{ item.product.price|stringformat:"d" }}</p>
+                            <p style="color: var(--gold); font-weight: 700;">₹{{ item.unit_price|stringformat:"d" }}</p>
                         </div>
                     </div>
 

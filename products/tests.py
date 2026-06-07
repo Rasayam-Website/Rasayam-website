@@ -96,6 +96,59 @@ class RasayamCoreSystemTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Minimal Cotton Kurti")
 
+    def test_cart_uses_price_snapshot(self):
+        """Cart totals should keep the price captured when the item was added."""
+        user = User.objects.create_user(username="price-buyer", password="test-pass-123")
+        cart = Cart.objects.create(user=user)
+        CartItem.objects.create(
+            cart=cart,
+            product=self.item_without_image,
+            quantity=2,
+            price=2000,
+        )
+        self.item_without_image.price = 3000
+        self.item_without_image.save(update_fields=['price'])
+
+        self.client.force_login(user)
+        response = self.client.get(reverse('cart'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "₹2000")
+        self.assertContains(response, "₹4000")
+
+    def test_paid_order_clears_only_snapshot_quantities(self):
+        """Payment finalization should leave cart quantities added after checkout."""
+        from .views import clear_paid_cart_items
+
+        user = User.objects.create_user(username="partial-clear", password="test-pass-123")
+        cart = Cart.objects.create(user=user)
+        cart_item = CartItem.objects.create(
+            cart=cart,
+            product=self.item_without_image,
+            quantity=3,
+            price=self.item_without_image.price,
+        )
+        order = Order.objects.create(
+            user=user,
+            total_amount=self.item_without_image.price * 2,
+            status="Pending",
+            original_cart_items=[
+                {
+                    'cart_item_id': cart_item.id,
+                    'product_id': self.item_without_image.id,
+                    'product_name': self.item_without_image.name,
+                    'selected_size': '',
+                    'quantity': 2,
+                    'price': str(self.item_without_image.price),
+                }
+            ],
+        )
+
+        clear_paid_cart_items(cart, order)
+
+        cart_item.refresh_from_db()
+        self.assertEqual(cart_item.quantity, 1)
+
     def test_selected_size_is_saved_and_displayed(self):
         """Selected sizes should stay attached to cart and order items."""
         user = User.objects.create_user(username="sized-buyer", password="test-pass-123")

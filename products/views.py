@@ -255,7 +255,9 @@ def profile_view(request):
 @login_required
 def save_order(request):
     cart = get_object_or_404(Cart, user=request.user)
-    cart_items = cart.items.all()
+    cart_items = list(
+        cart.items.select_related('product').prefetch_related('product__sizes')
+    )
 
     if not cart_items:
         messages.error(request, "Your bag is empty.")
@@ -269,25 +271,36 @@ def save_order(request):
         messages.error(request, f"Gateway Error: {str(e)}")
         return redirect('cart')
 
+    original_cart_items = []
+    for item in cart_items:
+        # Validate size is still available before the order is created.
+        if item.selected_size and not item.product.sizes.filter(name=item.selected_size).exists():
+            messages.error(request, f"Size {item.selected_size} is no longer available. Please update your selection.")
+            return redirect('cart')
+
+        original_cart_items.append({
+            'cart_item_id': item.id,
+            'product_id': item.product_id,
+            'product_name': item.product.name,
+            'selected_size': item.selected_size,
+            'quantity': item.quantity,
+            'price': str(item.unit_price),
+        })
+
     # 1. Create the Order record (status stays 'Pending')
     order = Order.objects.create(
         user=request.user,
         total_amount=total_amount,
-        status='Pending'
+        status='Pending',
+        original_cart_items=original_cart_items,
     )
 
     for item in cart_items:
-        # Validate size is still available
-        if item.selected_size and not item.product.sizes.filter(name=item.selected_size).exists():
-            messages.error(request, f"Size {item.selected_size} is no longer available. Please update your selection.")
-            order.delete()
-            return redirect('cart')
-        
         OrderItem.objects.create(
             order=order,
             product_name=item.product.name,
             selected_size=item.selected_size,
-            price=item.price if item.price > 0 else item.product.price,
+            price=item.unit_price,
             quantity=item.quantity,
             image_url=item.product.image.url if item.product.image else ""
         )
@@ -316,7 +329,50 @@ def save_order(request):
     except Exception as e:
         messages.error(request, f"Gateway Error: {str(e)}")
         return redirect('cart')
-    
+
+
+def clear_paid_cart_items(cart, order):
+    """Remove only the cart quantities that were captured for this order."""
+    snapshot = order.original_cart_items or []
+
+    if snapshot:
+        for entry in snapshot:
+            cart_item = cart.items.filter(id=entry.get('cart_item_id')).first()
+            if not cart_item:
+                continue
+
+            if (
+                cart_item.product_id != entry.get('product_id')
+                or cart_item.selected_size != entry.get('selected_size', '')
+            ):
+                continue
+
+            paid_quantity = int(entry.get('quantity') or 0)
+            if paid_quantity <= 0:
+                continue
+
+            if cart_item.quantity > paid_quantity:
+                cart_item.quantity -= paid_quantity
+                cart_item.save(update_fields=['quantity'])
+            else:
+                cart_item.delete()
+        return
+
+    # Backward-compatible fallback for pending orders created before snapshots existed.
+    for order_item in order.items.all():
+        cart_item = cart.items.filter(
+            product__name=order_item.product_name,
+            selected_size=order_item.selected_size
+        ).first()
+        if not cart_item:
+            continue
+
+        if cart_item.quantity > order_item.quantity:
+            cart_item.quantity -= order_item.quantity
+            cart_item.save(update_fields=['quantity'])
+        else:
+            cart_item.delete()
+
 
 @login_required
 def payment_verify(request):
@@ -338,7 +394,7 @@ def payment_verify(request):
             razorpay_client.utility.verify_payment_signature(params_dict)
 
             # 2. Update the Order in your database
-            order = Order.objects.get(razorpay_order_id=razorpay_order_id)
+            order = Order.objects.get(razorpay_order_id=razorpay_order_id, user=request.user)
             order.razorpay_payment_id = payment_id
             order.razorpay_signature = signature
             order.is_paid = True
@@ -346,18 +402,8 @@ def payment_verify(request):
             order.save()
 
             # 3. SUCCESS: Clear only the items from this completed order
-            # Get the user's cart
             cart = Cart.objects.get(user=request.user)
-            # Delete only cart items that were in this order
-            cart_item_ids = []
-            for order_item in order.items.all():
-                cart_item_ids.extend(
-                    cart.items.filter(
-                        product__name=order_item.product_name,
-                        selected_size=order_item.selected_size
-                    ).values_list('id', flat=True)
-                )
-            CartItem.objects.filter(id__in=cart_item_ids).delete()
+            clear_paid_cart_items(cart, order)
 
             messages.success(request, "Payment verified! Your order is being prepared.")
             return redirect('payment_success', order_id=order.id)
@@ -397,8 +443,10 @@ def decrease_cart_item(request, item_id):
     if cart_item.quantity > 1:
         cart_item.quantity -= 1
         cart_item.save()
+        messages.info(request, "Item quantity updated.")
     else:
         cart_item.delete()
+        messages.info(request, "Item removed.")
     return redirect('cart')
 
 @login_required
