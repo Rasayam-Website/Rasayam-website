@@ -10,8 +10,11 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.cache import cache_page
 from django.utils import timezone
 from django.db.models import Q
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django_ratelimit.decorators import ratelimit
 from .models import (
     Product, Banner, Category, PromoBox, 
     CustomerProfile, ContactInquiry, Order, OrderItem, Review,
@@ -59,11 +62,13 @@ def get_razorpay_client():
 
 # --- 1. Main Display Views ---
 
+@cache_page(60 * 5)  # Cache for 5 minutes
 def index(request):
     banners = Banner.objects.filter(active=True).order_by('order')
     categories = Category.objects.all().order_by('order')
     promos = PromoBox.objects.all().order_by('order')[:3]
-    items = Product.objects.all().prefetch_related('gallery_images')
+    # Use prefetch_related to optimize gallery_images loading
+    items = Product.objects.all().prefetch_related('gallery_images').select_related('category')[:12]
     
     context = {
         'items': items,
@@ -73,8 +78,24 @@ def index(request):
     }
     return render(request, 'products/index.html', context)
 
+@ratelimit(key='ip', rate='30/m', method='GET')  # 30 requests per minute
 def shop(request):
-    items = Product.objects.all().prefetch_related('gallery_images')
+    # Get page number from request
+    page = request.GET.get('page', 1)
+    
+    # Optimized query with prefetches
+    items_list = Product.objects.all().prefetch_related('gallery_images').select_related('category').order_by('-id')
+    
+    # Paginate results - 12 items per page
+    paginator = Paginator(items_list, 12)
+    
+    try:
+        items = paginator.page(page)
+    except PageNotAnInteger:
+        items = paginator.page(1)
+    except EmptyPage:
+        items = paginator.page(paginator.num_pages)
+    
     categories = Category.objects.all().order_by('order')
     promos = PromoBox.objects.all().order_by('order')[:3]
     
@@ -87,17 +108,22 @@ def shop(request):
         'items': items, 
         'categories': categories, 
         'promos': promos,
-        'cart_product_ids': cart_product_ids
+        'cart_product_ids': cart_product_ids,
+        'paginator': paginator,
     })
 
+@cache_page(60 * 10)  # Cache for 10 minutes
 def about_view(request):
-    # Fetch all reviews, or just verified ones for a premium look
-    reviews = Review.objects.filter(is_verified=True).order_by('-id')
+    # Fetch only verified reviews to improve performance
+    reviews = Review.objects.filter(
+        is_verified=True
+    ).select_related('user', 'product').order_by('-id')[:20]  # Limit to recent 20
     return render(request, 'products/about.html', {'reviews': reviews})
 
 def about_us(request):
     return render(request, 'products/about_us.html')
 
+@ratelimit(key='ip', rate='10/m', method='POST')  # Rate limit POST requests
 def contact(request):
     if request.method == 'POST':
         full_name = request.POST.get('full_name')
@@ -123,9 +149,10 @@ def contact(request):
 @login_required
 def cart(request):
     cart, created = Cart.objects.get_or_create(user=request.user)
-    cart_items = cart.items.all()
+    # Optimize query by using select_related and prefetch_related
+    cart_items = cart.items.select_related('product').prefetch_related('product__gallery_images').all()
     total_price = sum(item.total_item_price for item in cart_items)
-    recommended_items = Product.objects.all().exclude(category__isnull=True).order_by('?')[:4]
+    recommended_items = Product.objects.all().exclude(category__isnull=True).select_related('category').order_by('?')[:4]
     
     context = {
         'cart_items': cart_items,
@@ -138,16 +165,37 @@ def cart(request):
 
 def category_detail(request, slug):
     category = get_object_or_404(Category, slug=slug)
-    products = Product.objects.filter(category=category).prefetch_related('gallery_images')
+    
+    # Pagination for category products
+    page = request.GET.get('page', 1)
+    products_list = Product.objects.filter(
+        category=category
+    ).prefetch_related('gallery_images').select_related('category').order_by('-id')
+    
+    paginator = Paginator(products_list, 12)
+    try:
+        products = paginator.page(page)
+    except (PageNotAnInteger, EmptyPage):
+        products = paginator.page(1)
+    
     return render(request, 'products/category_detail.html', {
         'category': category,
-        'products': products
+        'products': products,
+        'paginator': paginator,
     })
 
 def product_detail_view(request, pk):
-    """Product Detail with Gallery and Sizes"""
-    product = get_object_or_404(Product.objects.prefetch_related('gallery_images', 'sizes'), pk=pk)
-    reviews = product.reviews.all().order_by('-created_at')
+    """Product Detail with Gallery and Sizes - Optimized query"""
+    # Use select_related and prefetch_related for optimal performance
+    product = get_object_or_404(
+        Product.objects.select_related('category').prefetch_related(
+            'gallery_images',
+            'sizes',
+        ),
+        pk=pk
+    )
+    # Get recent reviews separately without slicing in prefetch
+    reviews = product.reviews.select_related('user').order_by('-created_at')[:10]
     
     # Process highlights for list display
     highlights_list = product.highlights.split('\n') if product.highlights else []
@@ -160,6 +208,7 @@ def product_detail_view(request, pk):
 
 # --- 3. Authentication Views ---
 
+@ratelimit(key='ip', rate='5/m', method='POST')  # Prevent brute force
 def register_view(request):
     if request.method == 'POST':
         phone = request.POST.get('phone')
@@ -192,6 +241,7 @@ def register_view(request):
         
     return render(request, 'products/register.html')
 
+@ratelimit(key='ip', rate='5/m', method='POST')  # Prevent brute force
 def login_view(request):
     if request.method == "POST":
         phone = request.POST.get('phone_number')
@@ -213,6 +263,7 @@ def login_view(request):
 
     return render(request, 'products/login.html')
 
+@ratelimit(key='ip', rate='10/m', method='POST')  # Rate limit OTP attempts
 def verify_otp(request, phone_number):
     profile = get_object_or_404(CustomerProfile, phone_number=phone_number.strip())
     
@@ -248,13 +299,29 @@ def logout_view(request):
 def profile_view(request):
     # We only want to show orders that were successfully completed
     orders = request.user.orders.filter(is_paid=True).order_by('-created_at')
-    return render(request, 'products/profile.html', {'orders': orders})
+    order_count = orders.count()
+
+    if order_count == 0:
+        customer_badge = 'New Welcome'
+    elif order_count < 4:
+        customer_badge = 'Regular Customer'
+    else:
+        customer_badge = 'Loyal Customer'
+
+    context = {
+        'orders': orders,
+        'customer_badge': customer_badge,
+        'is_staff_portal_user': request.user.is_active and request.user.is_staff,
+    }
+    return render(request, 'products/profile.html', context)
 
 # --- 4. Order & Cart Processing (with Razorpay) ---
 
 @login_required
+@ratelimit(key='user', rate='10/h', method='POST')  # Prevent order spam
 def save_order(request):
     cart = get_object_or_404(Cart, user=request.user)
+    # Optimize query with select_related
     cart_items = list(
         cart.items.select_related('product').prefetch_related('product__sizes')
     )
@@ -457,6 +524,7 @@ def remove_from_cart(request, item_id):
     return redirect('cart')
 
 @login_required
+@ratelimit(key='user', rate='30/m', method='POST')  # Prevent spam adds
 def add_to_cart_ajax(request, product_id):
     product = get_object_or_404(Product, id=product_id)
     selected_size = get_selected_size_from_request(request, product)
@@ -553,20 +621,32 @@ def collections_view(request):
     user_collections = request.user.wishlists.prefetch_related('items__product').order_by('-created_at')
     return render(request, 'products/collections.html', {'collections': user_collections})
 
+@ratelimit(key='ip', rate='60/m', method='GET')  # Rate limit search requests
 def search_view(request):
-    query = request.GET.get('q')
+    query = request.GET.get('q', '').strip()
     results = []
+    page = request.GET.get('page', 1)
+    paginator = None
     
-    if query:
-        # Searches across Name, Seller Tag, and Category Name
-        results = Product.objects.filter(
+    if query and len(query) >= 2:  # Require at least 2 characters
+        # Optimized search with select_related and prefetch_related
+        results_list = Product.objects.filter(
             Q(name__icontains=query) | 
             Q(seller_tag__icontains=query) | 
             Q(category__name__icontains=query) |
             Q(description__icontains=query)
-        ).distinct()
+        ).select_related('category').prefetch_related('gallery_images').distinct().order_by('-id')
+        
+        # Paginate search results - 12 items per page
+        paginator = Paginator(results_list, 12)
+        
+        try:
+            results = paginator.page(page)
+        except (PageNotAnInteger, EmptyPage):
+            results = paginator.page(1)
     
     return render(request, 'products/search_results.html', {
         'query': query,
-        'results': results
+        'results': results,
+        'paginator': paginator,
     })

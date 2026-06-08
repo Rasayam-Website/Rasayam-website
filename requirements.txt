@@ -23,3 +23,6 @@ urllib3==2.6.3
 gunicorn
 dj-database-url
 whitenoise
+django-storages[boto3]
+django-redis>=5.4.0
+django-ratelimit>=4.1.0

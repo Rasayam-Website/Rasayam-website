@@ -16,21 +16,62 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def env_list(name, default=None):
+    value = os.getenv(name)
+    if not value:
+        return list(default or [])
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+
 # Quick-start development settings - unsuitable for production
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure--kmib+28jls)_o*vi!288xd&me=4)64#pli0y!(vhp+g&3-msr')
+DEBUG = env_bool('DEBUG', default=True)
+STRICT_PRODUCTION_ENV = env_bool('STRICT_PRODUCTION_ENV', default=False)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-# Automatically handles True locally and False on Render when configured in dashboard env variables
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+# SECURITY WARNING: keep the secret key used in production secret.
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-local-development-only-change-in-production'
+    else:
+        raise ValueError('Production requires SECRET_KEY to be set.')
 
-# Secure host bindings for local servers and production endpoints
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+# Hostnames are supplied by infrastructure. Examples:
+# ALLOWED_HOSTS=rasayam.com,www.rasayam.com,rasayam-alb-123.ap-south-1.elb.amazonaws.com
+CONFIGURED_ALLOWED_HOSTS = env_list('ALLOWED_HOSTS')
+ALLOWED_HOSTS = CONFIGURED_ALLOWED_HOSTS or ['localhost', '127.0.0.1']
+
 RENDER_EXTERNAL_HOSTNAME = os.getenv('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
-else:
-    ALLOWED_HOSTS.append('*')  # Fallback for dynamic preview links if needed
+
+AWS_APP_HOSTNAME = os.getenv('AWS_APP_HOSTNAME')
+if AWS_APP_HOSTNAME:
+    ALLOWED_HOSTS.append(AWS_APP_HOSTNAME)
+
+ALLOWED_HOSTS = sorted(set(ALLOWED_HOSTS))
+if not DEBUG and STRICT_PRODUCTION_ENV and not CONFIGURED_ALLOWED_HOSTS and not RENDER_EXTERNAL_HOSTNAME and not AWS_APP_HOSTNAME:
+    raise ValueError('Production requires ALLOWED_HOSTS to include your domain or AWS load balancer hostname.')
+
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
+
+# AWS load balancers and reverse proxies terminate HTTPS before Gunicorn.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = env_bool('USE_X_FORWARDED_HOST', default=not DEBUG)
+SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', default=not DEBUG)
+SECURE_REDIRECT_EXEMPT = env_list('SECURE_REDIRECT_EXEMPT', default=[r'^health/$'])
+SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', default=not DEBUG)
+CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', default=not DEBUG)
+SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False)
+SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', default=False)
+X_FRAME_OPTIONS = os.getenv('X_FRAME_OPTIONS', 'DENY')
 
 
 # Application definition
@@ -57,12 +98,14 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Efficient static file server for production
+    'django.middleware.cache.UpdateCacheMiddleware',  # Cache middleware (first)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.cache.FetchFromCacheMiddleware',  # Cache middleware (last)
 ]
 
 ROOT_URLCONF = 'Rasayam_website.urls'
@@ -92,21 +135,13 @@ WSGI_APPLICATION = 'Rasayam_website.wsgi.application'
 # ==========================================
 # DATABASE CONFIGURATION
 # ==========================================
-# Seamlessly checks for a unified cloud connection string first (Render/Neon).
-# Falls back directly to split local variable keys if a single string isn't present.
+# Prefer a unified database URL for AWS RDS, Neon, Render, or other managed Postgres.
 if os.getenv('DATABASE_URL'):
     DATABASES = {
         'default': dj_database_url.config(
             conn_max_age=600,
             conn_health_checks=True,
         )
-    }
-elif not RENDER_EXTERNAL_HOSTNAME and os.getenv('USE_POSTGRES') != 'True':
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
     }
 elif os.getenv('DB_NAME') and os.getenv('DB_USER'):
     DATABASES = {
@@ -117,15 +152,80 @@ elif os.getenv('DB_NAME') and os.getenv('DB_USER'):
             'PASSWORD': os.getenv('DB_PASSWORD', ''),
             'HOST': os.getenv('DB_HOST', '127.0.0.1'),
             'PORT': os.getenv('DB_PORT', '5432'),
+            # Connection pooling for high-traffic scenarios
+            'CONN_MAX_AGE': 600,  # Keep connections alive for 10 minutes
+            'OPTIONS': {
+                'connect_timeout': 10,
+                'statement_timeout': 30000,  # 30 seconds
+            }
         }
     }
 else:
+    if (
+        not DEBUG
+        and STRICT_PRODUCTION_ENV
+        and not env_bool('ALLOW_SQLITE_IN_PRODUCTION', default=False)
+    ):
+        raise ValueError('Production requires DATABASE_URL or DB_NAME/DB_USER/DB_HOST for AWS RDS.')
+
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+
+# ==========================================
+# CACHING CONFIGURATION (High Traffic Optimization)
+# ==========================================
+# Production uses Redis; Development uses local memory cache
+if not DEBUG and os.getenv('REDIS_URL'):
+    # Production: Use Redis for distributed caching
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': os.getenv('REDIS_URL'),
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'CONNECTION_POOL_KWARGS': {
+                    'max_connections': 50,
+                    'retry_on_timeout': True,
+                },
+                'SOCKET_CONNECT_TIMEOUT': 5,
+                'SOCKET_TIMEOUT': 5,
+                'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+            }
+        }
+    }
+else:
+    # Development: Use local memory cache
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'rasayam-cache',
+            'TIMEOUT': 300,  # 5 minutes default cache timeout
+            'OPTIONS': {
+                'MAX_ENTRIES': 10000,
+            }
+        }
+    }
+
+# Cache middleware settings for automatic page caching
+CACHE_MIDDLEWARE_ALIAS = 'default'
+CACHE_MIDDLEWARE_SECONDS = int(os.getenv('CACHE_MIDDLEWARE_SECONDS', '300'))  # 5 minutes
+
+# ==========================================
+# QUERY OPTIMIZATION SETTINGS
+# ==========================================
+# Enable persistent database connections
+ATOMIC_REQUESTS = False  # Avoid unnecessary transaction overhead
+
+# Query result caching
+if not DEBUG:
+    # Log slow queries in production (> 1000ms)
+    SLOW_QUERY_THRESHOLD = int(os.getenv('SLOW_QUERY_THRESHOLD', '1000'))
+else:
+    SLOW_QUERY_THRESHOLD = int(os.getenv('SLOW_QUERY_THRESHOLD', '100'))
 
 
 # Password validation
@@ -168,22 +268,43 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Cloudinary Credentials
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
-    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET')
+    'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
+    'API_SECRET': os.getenv('CLOUDINARY_API_SECRET'),
 }
+
+# Optional AWS S3 media storage. If AWS_STORAGE_BUCKET_NAME is present, uploaded
+# product/category/banner images go to S3 instead of the local filesystem.
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME') or os.getenv('AWS_DEFAULT_REGION')
+AWS_S3_CUSTOM_DOMAIN = os.getenv('AWS_S3_CUSTOM_DOMAIN')
+AWS_QUERYSTRING_AUTH = env_bool('AWS_QUERYSTRING_AUTH', default=False)
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = os.getenv('AWS_DEFAULT_ACL') or None
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': os.getenv('AWS_S3_CACHE_CONTROL', 'max-age=86400'),
+}
+
+MEDIA_STORAGE_BACKEND = os.getenv('MEDIA_STORAGE_BACKEND', '').strip()
+if not MEDIA_STORAGE_BACKEND:
+    if AWS_STORAGE_BUCKET_NAME:
+        MEDIA_STORAGE_BACKEND = 'storages.backends.s3.S3Storage'
+    elif all(CLOUDINARY_STORAGE.values()):
+        MEDIA_STORAGE_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+    else:
+        MEDIA_STORAGE_BACKEND = 'django.core.files.storage.FileSystemStorage'
 
 # Modern Django Storage Configuration
 IS_TESTING = 'test' in sys.argv
 STATICFILES_BACKEND = (
     "django.contrib.staticfiles.storage.StaticFilesStorage"
     if DEBUG or IS_TESTING
-    else "whitenoise.storage.CompressedStaticFilesStorage"
+    else "whitenoise.storage.CompressedManifestStaticFilesStorage"
 )
 
 STORAGES = {
     "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        "BACKEND": MEDIA_STORAGE_BACKEND,
     },
     "staticfiles": {
         "BACKEND": STATICFILES_BACKEND,
@@ -280,10 +401,49 @@ UNFOLD = {
     },
 }
 
-# Prevents WhiteNoise from crashing during local development and testing if an asset is missing
-WHITENOISE_MANIFEST_STRICT = False
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-if not DEBUG and (not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET):
-    raise ValueError("Production requires RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET")
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '[{levelname}] {asctime} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+    },
+    'loggers': {
+        'django.server': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
+
+if not DEBUG and STRICT_PRODUCTION_ENV:
+    required_production_env = {
+        'RAZORPAY_KEY_ID': RAZORPAY_KEY_ID,
+        'RAZORPAY_KEY_SECRET': RAZORPAY_KEY_SECRET,
+    }
+    missing_production_env = [
+        key for key, value in required_production_env.items()
+        if not value
+    ]
+    if missing_production_env:
+        raise ValueError(f"Production requires: {', '.join(missing_production_env)}")
