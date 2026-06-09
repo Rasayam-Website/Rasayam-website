@@ -65,6 +65,7 @@ class Size(models.Model):
 class Product(models.Model):
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='products')
     name = models.CharField(max_length=255)
+    slug = models.SlugField(unique=True, blank=True, null=True, help_text="Auto-generated from name for SEO-friendly URLs")
     price = models.DecimalField(max_digits=10, decimal_places=2)
     # This acts as the "Main" thumbnail image
     image = models.ImageField(upload_to='product_images/', blank=True, null=True)

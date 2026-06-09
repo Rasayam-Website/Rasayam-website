@@ -1,11 +1,16 @@
 import os
 import sys
-from dotenv import load_dotenv
 
-# Load variables from your local .env file
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    # Load variables from your local .env file
+    load_dotenv()
+except ImportError:
+    # In AWS/Production, dotenv might not be installed as vars are native
+    print("⚠️ python-dotenv not installed. Relying on system environment variables.")
 
 def run_diagnostic():
+    has_errors = False
     print("=" * 60)
     print(" 🌟 RASAYAM PRODUCTION-READY DIAGNOSTIC CHECKER 🌟 ")
     print("=" * 60)
@@ -14,6 +19,7 @@ def run_diagnostic():
     db_url = os.getenv('DATABASE_URL')
     if not db_url:
         print("❌ DB ERROR: 'DATABASE_URL' is missing from your .env file.")
+        has_errors = True
     else:
         print(f"✅ DB STATUS: Connection string verified.")
 
@@ -34,6 +40,7 @@ def run_diagnostic():
         print("✅ CLOUDINARY STATUS: Authentication successful! Images will load cleanly.")
     except Exception as e:
         print(f"❌ CLOUDINARY ERROR: Failed to handshake with cloud bucket. Reason: {e}")
+        has_errors = True
 
     # 3. Test Razorpay Payment Gateway Integration
     print("\n--- Testing Razorpay Payment Gateway API ---")
@@ -51,8 +58,13 @@ def run_diagnostic():
         print("✅ RAZORPAY STATUS: Gateway credentials authorized! Checkout system active.")
     except Exception as e:
         print(f"❌ RAZORPAY ERROR: API key invalid or rejected by gateway. Reason: {e}")
+        has_errors = True
 
     print("=" * 60)
+    
+    # Exit with code 1 if errors exist so CI/CD pipelines correctly fail
+    if has_errors:
+        sys.exit(1)
 
 if __name__ == "__main__":
     run_diagnostic()

@@ -206,6 +206,28 @@ def product_detail_view(request, pk):
         'highlights_list': highlights_list
     })
 
+def product_detail_view_slug(request, slug):
+    """Product Detail by Slug (SEO-friendly URL) - Optimized query"""
+    # Use select_related and prefetch_related for optimal performance
+    product = get_object_or_404(
+        Product.objects.select_related('category').prefetch_related(
+            'gallery_images',
+            'sizes',
+        ),
+        slug=slug
+    )
+    # Get recent reviews separately without slicing in prefetch
+    reviews = product.reviews.select_related('user').order_by('-created_at')[:10]
+    
+    # Process highlights for list display
+    highlights_list = product.highlights.split('\n') if product.highlights else []
+
+    return render(request, 'products/product_detail.html', {
+        'product': product,
+        'reviews': reviews,
+        'highlights_list': highlights_list
+    })
+
 # --- 3. Authentication Views ---
 
 @ratelimit(key='ip', rate='5/m', method='POST')  # Prevent brute force
@@ -584,7 +606,6 @@ def get_wishlists(request):
     return JsonResponse(list(wishlists), safe=False)
 
 @login_required
-@csrf_exempt
 def add_to_wishlist(request):
     """Saves a product to a specific or brand new wishlist"""
     if request.method != "POST":

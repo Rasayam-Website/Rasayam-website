@@ -447,3 +447,13 @@ if not DEBUG and STRICT_PRODUCTION_ENV:
     ]
     if missing_production_env:
         raise ValueError(f"Production requires: {', '.join(missing_production_env)}")
+
+# Additional validation for Razorpay keys in all production environments
+# (Solved by Claude: Added startup validation to catch missing payment gateway credentials early)
+if not DEBUG and not RAZORPAY_KEY_ID:
+    import warnings
+    warnings.warn("WARNING: RAZORPAY_KEY_ID is not set. Payment verification will fail in production.", RuntimeWarning)
+    
+if not DEBUG and not RAZORPAY_KEY_SECRET:
+    import warnings
+    warnings.warn("WARNING: RAZORPAY_KEY_SECRET is not set. Payment processing will fail in production.", RuntimeWarning)

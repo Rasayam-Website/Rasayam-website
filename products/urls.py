@@ -21,7 +21,8 @@ urlpatterns = [
     
     # --- Product & Category Logic ---
     path('collection/<slug:slug>/', views.category_detail, name='category_detail'),
-    path('product/<int:pk>/', views.product_detail_view, name='product_detail'),
+    path('product/<int:pk>/', views.product_detail_view, name='product_detail'),  # Keep both for backward compatibility
+    path('product/<slug:slug>/', views.product_detail_view_slug, name='product_detail_slug'),
     
      # --- Wishlist Logic ---
     path('get-wishlists/', views.get_wishlists, name='get_wishlists'),

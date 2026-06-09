@@ -30,9 +30,10 @@ class ProductAdmin(ModelAdmin, ImportExportModelAdmin):
     import_form_class = ImportForm
     export_form_class = ExportForm
 
-    list_display = ('display_thumbnail', 'name', 'price', 'category', 'seller_tag')
+    list_display = ('display_thumbnail', 'name', 'slug', 'price', 'category', 'seller_tag')
     list_filter = ('category', 'seller_tag', 'sizes')
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'slug', 'description')
+    prepopulated_fields = {'slug': ('name',)}  # Auto-populate slug from name
     
     # Enables a nice side-by-side selection for sizes
     filter_horizontal = ('sizes',)
