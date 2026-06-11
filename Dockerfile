@@ -1,9 +1,9 @@
-FROM python:3.12-slim
+# ── Stage 1: build dependencies ──────────────────────────────────────────────
+FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PORT=8000
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
@@ -13,10 +13,35 @@ RUN apt-get update \
 
 COPY requirements.txt .
 RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
+    && pip install --prefix=/install -r requirements.txt
 
-COPY . .
+
+# ── Stage 2: runtime image ────────────────────────────────────────────────────
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8000 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# Runtime libs only (no gcc)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed packages from builder
+COPY --from=builder /install /usr/local
+
+# Non-root user for security
+RUN addgroup --system app && adduser --system --ingroup app app
+
+COPY --chown=app:app . .
+
+USER app
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python manage.py collectstatic --noinput --clear && if [ \"$RUN_MIGRATIONS_ON_STARTUP\" = \"true\" ]; then python manage.py migrate --noinput; fi && gunicorn Rasayam_website.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers ${WEB_CONCURRENCY:-3} --timeout ${GUNICORN_TIMEOUT:-120} --access-logfile - --error-logfile -"]
+# entrypoint.sh is the single source of truth for startup logic
+ENTRYPOINT ["sh", "entrypoint.sh"]

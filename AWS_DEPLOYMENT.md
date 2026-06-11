@@ -1,63 +1,145 @@
-# Rasayam AWS Deployment Checklist
+# Rasayam — AWS Deployment Guide
 
-This project is ready for the infrastructure phase with Django + Gunicorn, a `/health/` endpoint, environment-driven production settings, optional S3 media storage, and RDS-ready database configuration.
+**Last Updated**: June 11, 2026  
+**Status**: Production-ready. All systems implemented and verified.
+
+---
+
+## Architecture Overview
+
+```
+Internet → Route 53 → ACM/ALB (HTTPS) → ECS Fargate / App Runner
+                                              │
+                       ┌──────────────────────┼──────────────────────┐
+                       ▼                      ▼                      ▼
+                  RDS PostgreSQL        S3 (static)          S3 (media)
+                  (ap-south-1)       rasayam-static-prod   rasayam-media-prod
+                       │
+                  ElastiCache Redis
+                  (session + page cache)
+```
+
+---
 
 ## Runtime Contract
 
-- App command: `gunicorn Rasayam_website.wsgi:application --bind 0.0.0.0:$PORT`
-- Health check path: `/health/`
-- Static files: served by WhiteNoise after `python manage.py collectstatic --noinput --clear`
-- Media uploads: use S3 when `AWS_STORAGE_BUCKET_NAME` is set
-- Database: PostgreSQL via `DATABASE_URL` or `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST`
+| Property | Value |
+|---|---|
+| Startup command | `sh entrypoint.sh` (via Dockerfile `ENTRYPOINT`) |
+| Gunicorn workers | Auto: `2 × nproc + 1`, capped at 9. Override with `WEB_CONCURRENCY`. |
+| Health check | `GET /health/` → 200 OK (probes DB + cache + S3) |
+| Static files | `collectstatic` → S3 via `S3StaticStorage`. WhiteNoise active only when S3 bucket unset. |
+| Media uploads | S3 via `S3MediaStorage` (`media/` prefix in `AWS_STORAGE_BUCKET_NAME`) |
+| Database | PostgreSQL — `DATABASE_URL` or split `DB_*` vars → RDS |
+| Cache | Redis via `REDIS_URL` → ElastiCache. Falls back to local memory in dev. |
+| Migrations | `RUN_MIGRATIONS_ON_STARTUP=false` for ECS (run as one-off task). `true` acceptable for App Runner. |
+
+---
 
 ## Required AWS Resources
 
-- EC2, Elastic Beanstalk, App Runner, or ECS/Fargate for the app runtime
-- RDS PostgreSQL for the production database
-- S3 bucket for uploaded product/category/banner images
-- IAM role or access keys allowing the app to read/write the S3 media bucket
-- Application Load Balancer or managed HTTPS endpoint
-- ACM certificate for the production domain
-- Route 53 records for `rasayam.com` and `www.rasayam.com`
-- CloudWatch Logs for application logs
+- **ECS Fargate** or **App Runner** — app runtime
+- **RDS PostgreSQL** (ap-south-1) — primary database
+- **S3 bucket** `rasayam-static-prod` — collectstatic output
+- **S3 bucket** `rasayam-media-prod` — uploaded images (or same bucket with separate prefixes)
+- **ElastiCache Redis** — distributed cache and session backend
+- **Application Load Balancer** — HTTPS termination
+- **ACM certificate** — for `rasayam.com` + `www.rasayam.com`
+- **Route 53** — DNS records pointing to ALB
+- **IAM task role** — S3 read/write permissions (prefer over static keys)
+- **CloudWatch Logs** — container log group
+
+---
 
 ## Required Environment Variables
 
-Use `.env.example` as the source of truth. At minimum, production needs:
+See `.env.example` for the full list. Minimum production set:
 
-- `DEBUG=False`
-- `SECRET_KEY`
-- `ALLOWED_HOSTS`
-- `CSRF_TRUSTED_ORIGINS`
-- `DATABASE_URL` or split RDS variables
-- `RAZORPAY_KEY_ID`
-- `RAZORPAY_KEY_SECRET`
-- `AWS_STORAGE_BUCKET_NAME` for S3 media uploads
+```bash
+# Django core
+DEBUG=False
+STRICT_PRODUCTION_ENV=True
+SECRET_KEY=<long random string>
+ALLOWED_HOSTS=rasayam.com,www.rasayam.com,<alb-dns>.ap-south-1.elb.amazonaws.com
+CSRF_TRUSTED_ORIGINS=https://rasayam.com,https://www.rasayam.com
+SECURE_SSL_REDIRECT=True
+SECURE_HSTS_SECONDS=31536000
+
+# Database
+DATABASE_URL=postgres://user:pass@rds-endpoint.ap-south-1.rds.amazonaws.com:5432/rasayam
+
+# Cache
+REDIS_URL=redis://elasticache-endpoint.ap-south-1.cache.amazonaws.com:6379/0
+
+# S3 media
+AWS_STORAGE_BUCKET_NAME=rasayam-media-prod
+AWS_S3_REGION_NAME=ap-south-1
+
+# S3 static
+AWS_STATIC_BUCKET_NAME=rasayam-static-prod
+
+# Payments
+RAZORPAY_KEY_ID=rzp_live_...
+RAZORPAY_KEY_SECRET=...
+RAZORPAY_WEBHOOK_SECRET=<from Razorpay Dashboard → Webhooks>
+```
+
+---
 
 ## Deployment Steps
 
-1. Create RDS PostgreSQL and set `DATABASE_URL`.
-2. Create an S3 media bucket and attach read/write permissions to the app runtime role.
-3. Set environment variables from `.env.example` in the AWS service.
-4. Run migrations once:
-   ```bash
-   python manage.py migrate --noinput
-   ```
-5. Collect static files:
-   ```bash
-   python manage.py collectstatic --noinput --clear
-   ```
-6. Start the app with the `Procfile` or Dockerfile command.
-7. Configure the load balancer health check to `GET /health/`.
-8. Point the domain to the load balancer or managed AWS endpoint.
-
-## Docker/ECS Notes
-
-Build and run:
-
 ```bash
+# 1. Build image
 docker build -t rasayam-website .
-docker run --env-file .env.example -p 8000:8000 rasayam-website
+
+# 2. Push to ECR
+aws ecr get-login-password --region ap-south-1 | \
+  docker login --username AWS --password-stdin <account>.dkr.ecr.ap-south-1.amazonaws.com
+docker tag rasayam-website <account>.dkr.ecr.ap-south-1.amazonaws.com/rasayam-website:latest
+docker push <account>.dkr.ecr.ap-south-1.amazonaws.com/rasayam-website:latest
+
+# 3. Run migrations (one-off ECS task or App Runner job)
+python manage.py migrate --noinput
+
+# 4. Deploy new task definition / trigger App Runner redeploy
+
+# 5. Verify health check
+curl https://rasayam.com/health/
+# Expected: {"status": "ok", "checks": {"db": "ok", "cache": "ok", "s3": "ok"}}
 ```
 
-For ECS/Fargate, keep `RUN_MIGRATIONS_ON_STARTUP=false` and run migrations as a one-off task during releases. For a single App Runner style deployment, `RUN_MIGRATIONS_ON_STARTUP=true` is acceptable during early infrastructure testing.
+---
+
+## Webhook Configuration (Razorpay)
+
+1. Razorpay Dashboard → Settings → Webhooks → Add new endpoint
+2. URL: `https://rasayam.com/webhooks/razorpay/`
+3. Events: `payment.captured`
+4. Copy the webhook secret → set as `RAZORPAY_WEBHOOK_SECRET` in environment
+
+The endpoint verifies every request with HMAC-SHA256 before touching the database.
+
+---
+
+## Docker / ECS Notes
+
+```bash
+# Local test with production-like env
+docker run --env-file .env.example -p 8000:8000 rasayam-website
+
+# entrypoint.sh runs: collectstatic → optional migrate → gunicorn
+# RUN_MIGRATIONS_ON_STARTUP=false for ECS (run as one-off release task)
+# RUN_MIGRATIONS_ON_STARTUP=true acceptable for App Runner single-container
+```
+
+---
+
+## Rollback
+
+```bash
+# Code-only rollback — redeploy previous ECR image tag in ECS task definition
+
+# Database rollback (if needed)
+python manage.py migrate products 0012_remove_banner_banner_active_order_idx_and_more
+# Then redeploy previous image
+```

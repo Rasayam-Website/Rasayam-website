@@ -7,7 +7,7 @@ from unfold.contrib.import_export.forms import ExportForm, ImportForm
 from .models import (
     CustomerProfile, Product, Banner, Category, 
     Order, OrderItem, Review, PromoBox, ContactInquiry,
-    Size, ProductImage, Wishlist, WishlistItem, Cart  # Added Cart and Wishlist models
+    Size, ProductImage, Wishlist, WishlistItem, Cart, OTPToken
 )
 
 # --- 1. Product Inlines & Size Management ---
@@ -75,9 +75,15 @@ class CategoryAdmin(ModelAdmin):
 
 @admin.register(CustomerProfile)
 class CustomerProfileAdmin(ModelAdmin):
-    list_display = ('user', 'phone_number', 'city', 'is_verified', 'otp')
+    list_display = ('user', 'phone_number', 'city', 'is_verified')
     list_filter = ('is_verified', 'city')
     search_fields = ('user__username', 'phone_number')
+
+@admin.register(OTPToken)
+class OTPTokenAdmin(ModelAdmin):
+    list_display = ('profile', 'created_at', 'expires_at', 'is_used', 'attempts')
+    list_filter = ('is_used',)
+    readonly_fields = ('token', 'created_at', 'expires_at', 'attempts')
 
 @admin.register(ContactInquiry)
 class ContactInquiryAdmin(ModelAdmin):
@@ -151,10 +157,11 @@ class WishlistItemInline(TabularInline):
 
 @admin.register(WishlistItem)
 class WishlistItemAdmin(ModelAdmin):
-    list_display = ('wishlist', 'product', 'created_at')
+    list_display = ('wishlist', 'product', 'wishlist_created_at')
     search_fields = ('wishlist__name', 'product__name')
     list_filter = ('wishlist__created_at',)
-    
-    def created_at(self, obj):
+
+    def wishlist_created_at(self, obj):
         return obj.wishlist.created_at
-    created_at.short_description = "Added to Wishlist"
+    wishlist_created_at.short_description = "Added to Wishlist"
+    wishlist_created_at.admin_order_field = 'wishlist__created_at'

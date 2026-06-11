@@ -5,25 +5,40 @@
     <div class="container" style="max-width: 400px; background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
         <h2 style="font-family: 'Playfair Display'; text-align: center; margin-bottom: 15px;">Verify Phone</h2>
         <p style="text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 30px;">
-            We've sent a code to <strong>{{ phone }}</strong>.<br>
-            (Check your VS Code terminal!)
+            We've sent a 6-digit code to <strong>{{ phone }}</strong>.
         </p>
 
         {% if error %}
             <p style="color: #d9534f; text-align: center; font-size: 0.85rem; margin-bottom: 20px;">{{ error }}</p>
         {% endif %}
 
+        {% for message in messages %}
+            <p style="color: {% if message.tags == 'error' %}#d9534f{% else %}#3a7d44{% endif %}; text-align: center; font-size: 0.85rem; margin-bottom: 20px;">
+                {{ message }}
+            </p>
+        {% endfor %}
+
         <form method="POST">
             {% csrf_token %}
             <div style="margin-bottom: 25px;">
-                <input type="text" name="otp" placeholder="Enter 4-Digit Code" required 
+                <input type="text" name="otp" placeholder="Enter 6-digit code"
+                       inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" required
                        style="width: 100%; padding: 15px; border: 1px solid #ddd; text-align: center; font-size: 1.5rem; letter-spacing: 10px;">
             </div>
-            
             <button type="submit" style="width: 100%; padding: 15px; background: #1a1a1a; color: #fff; border: none; font-weight: 600; cursor: pointer; letter-spacing: 2px;">
-                VERIFY & SIGN IN
+                VERIFY &amp; SIGN IN
             </button>
         </form>
+
+        <p style="text-align: center; margin-top: 20px; font-size: 0.85rem; color: #888;">
+            Didn't receive a code?
+            <form method="POST" action="{% url 'resend_otp' phone %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" style="background: none; border: none; color: #9a846a; cursor: pointer; text-decoration: underline; font-size: 0.85rem; padding: 0;">
+                    Resend code
+                </button>
+            </form>
+        </p>
     </div>
 </section>
 {% endblock %}

@@ -5,9 +5,6 @@ from django.contrib.auth.models import User
 class CustomerProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
-    otp = models.CharField(max_length=6, blank=True, null=True)
-    otp_created_at = models.DateTimeField(blank=True, null=True)
-    
     city = models.CharField(max_length=100, blank=True, null=True)
     state = models.CharField(max_length=100, blank=True, null=True)
     gender = models.CharField(max_length=10, blank=True, null=True)
@@ -16,6 +13,33 @@ class CustomerProfile(models.Model):
 
     def __str__(self):
         return self.user.username
+
+
+class OTPToken(models.Model):
+    """One OTP record per authentication attempt. Old tokens are invalidated on resend."""
+    MAX_ATTEMPTS = 5
+    RESEND_COOLDOWN_SECONDS = 60
+    EXPIRY_MINUTES = 5
+
+    profile = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name='otp_tokens')
+    token = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    attempts = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() >= self.expires_at
+
+    def is_valid(self):
+        return not self.is_used and not self.is_expired() and self.attempts < self.MAX_ATTEMPTS
+
+    def __str__(self):
+        return f"OTP for {self.profile} (used={self.is_used})"
 
 class Banner(models.Model):
     title = models.CharField(max_length=100, blank=True)
@@ -78,6 +102,7 @@ class Product(models.Model):
     
     # Size selection
     sizes = models.ManyToManyField(Size, blank=True, help_text="Hold Ctrl to select multiple sizes.")
+    stock = models.PositiveIntegerField(default=0, help_text="Available units. 0 = out of stock.")
 
     def __str__(self):
         return self.name
@@ -125,6 +150,9 @@ class Order(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     original_cart_items = models.JSONField(default=list, blank=True)
+    shipping_address = models.TextField(blank=True, default='')
+    # Populated by the payment gateway on success; unique prevents duplicate confirmations.
+    transaction_id = models.CharField(max_length=100, unique=True, blank=True, null=True)
 
     # --- RAZORPAY PAYMENT FIELDS ---
     razorpay_order_id = models.CharField(max_length=100, blank=True, null=True)

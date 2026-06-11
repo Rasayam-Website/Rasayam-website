@@ -20,10 +20,52 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
+from django.db import connection
+from django.core.cache import cache
 
 
 def health_check(request):
-    return JsonResponse({'status': 'ok'})
+    checks = {}
+    ok = True
+
+    # 1. Database
+    try:
+        connection.ensure_connection()
+        checks['db'] = 'ok'
+    except Exception as e:
+        checks['db'] = f'error: {e}'
+        ok = False
+
+    # 2. Cache
+    try:
+        cache.set('health', '1', timeout=5)
+        assert cache.get('health') == '1'
+        checks['cache'] = 'ok'
+    except Exception as e:
+        checks['cache'] = f'error: {e}'
+        ok = False
+
+    # 3. S3 (only when configured — skipped in local/dev)
+    bucket = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', '')
+    if bucket:
+        try:
+            import boto3
+            from botocore.config import Config
+            s3 = boto3.client(
+                's3',
+                region_name=getattr(settings, 'AWS_S3_REGION_NAME', None),
+                config=Config(connect_timeout=3, read_timeout=3),
+            )
+            s3.head_bucket(Bucket=bucket)
+            checks['s3'] = 'ok'
+        except Exception as e:
+            checks['s3'] = f'error: {e}'
+            ok = False
+    else:
+        checks['s3'] = 'skipped'
+
+    status = 200 if ok else 503
+    return JsonResponse({'status': 'ok' if ok else 'degraded', 'checks': checks}, status=status)
 
 urlpatterns = [
     path('health/', health_check, name='health_check'),

@@ -91,13 +91,16 @@ INSTALLED_APPS = [
     'cloudinary_storage',
     'cloudinary',
     "import_export",
+    'storages',
 
     'products',
 ]
 
-MIDDLEWARE = [
+_MIDDLEWARE_BASE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Efficient static file server for production
+    # WhiteNoise is inserted here only when S3 is NOT serving static files.
+    # When S3 is active, static requests go directly to the CDN/S3 URL and
+    # WhiteNoise would only add overhead scanning the local staticfiles dir.
     'django.middleware.cache.UpdateCacheMiddleware',  # Cache middleware (first)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -107,6 +110,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.cache.FetchFromCacheMiddleware',  # Cache middleware (last)
 ]
+
+# Resolved below after S3 config is determined.
+MIDDLEWARE = _MIDDLEWARE_BASE
 
 ROOT_URLCONF = 'Rasayam_website.urls'
 
@@ -255,64 +261,78 @@ USE_TZ = True
 # STATIC & MEDIA FILES CONFIGURATION
 # ==========================================
 
-STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# 🚫 REMOVE OR COMMENT OUT THIS ENTIRE BLOCK BELOW:
-# STATICFILES_DIRS = [
-#     BASE_DIR / 'static',
-# ]
+# ── AWS S3 core ──────────────────────────────────────────────────────────────
+# Media bucket (required for S3 media uploads)
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME', '')
+# Static bucket — may be the same bucket as media (files are separated by prefix)
+AWS_STATIC_BUCKET_NAME = os.getenv('AWS_STATIC_BUCKET_NAME') or AWS_STORAGE_BUCKET_NAME
 
-# Cloudinary Credentials
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME') or os.getenv('AWS_DEFAULT_REGION', '')
+AWS_S3_CUSTOM_DOMAIN = os.getenv('AWS_S3_CUSTOM_DOMAIN', '')
+AWS_QUERYSTRING_AUTH = env_bool('AWS_QUERYSTRING_AUTH', default=False)
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = os.getenv('AWS_DEFAULT_ACL') or None
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': os.getenv('AWS_S3_CACHE_CONTROL', 'max-age=86400, public'),
+}
+# CORS: space-separated list of allowed origins, e.g. "https://rasayam.com https://www.rasayam.com"
+AWS_S3_CORS_ALLOW_ORIGINS = [
+    o.strip() for o in os.getenv('AWS_S3_CORS_ALLOW_ORIGINS', '').split() if o.strip()
+]
+
+# ── Storage backend resolution ───────────────────────────────────────────────
+IS_TESTING = 'test' in sys.argv
+_USE_S3_MEDIA = bool(AWS_STORAGE_BUCKET_NAME) and not IS_TESTING
+_USE_S3_STATIC = bool(AWS_STATIC_BUCKET_NAME) and not DEBUG and not IS_TESTING
+
+# Cloudinary credentials (kept as fallback when S3 is not configured)
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),
     'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
     'API_SECRET': os.getenv('CLOUDINARY_API_SECRET'),
 }
+_USE_CLOUDINARY = not _USE_S3_MEDIA and all(CLOUDINARY_STORAGE.values())
 
-# Optional AWS S3 media storage. If AWS_STORAGE_BUCKET_NAME is present, uploaded
-# product/category/banner images go to S3 instead of the local filesystem.
-AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
-AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME') or os.getenv('AWS_DEFAULT_REGION')
-AWS_S3_CUSTOM_DOMAIN = os.getenv('AWS_S3_CUSTOM_DOMAIN')
-AWS_QUERYSTRING_AUTH = env_bool('AWS_QUERYSTRING_AUTH', default=False)
-AWS_S3_FILE_OVERWRITE = False
-AWS_DEFAULT_ACL = os.getenv('AWS_DEFAULT_ACL') or None
-AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': os.getenv('AWS_S3_CACHE_CONTROL', 'max-age=86400'),
-}
+# ── Static files ─────────────────────────────────────────────────────────────
+if _USE_S3_STATIC:
+    _static_domain = AWS_S3_CUSTOM_DOMAIN or f'{AWS_STATIC_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com'
+    STATIC_URL = f'https://{_static_domain}/static/'
+    _STATICFILES_BACKEND = 'Rasayam_website.storages.S3StaticStorage'
+else:
+    STATIC_URL = '/static/'
+    _STATICFILES_BACKEND = (
+        'django.contrib.staticfiles.storage.StaticFilesStorage'
+        if DEBUG or IS_TESTING
+        else 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+    )
+    # Insert WhiteNoise only when it is actually serving static files.
+    if not DEBUG and not IS_TESTING:
+        MIDDLEWARE = (
+            [_MIDDLEWARE_BASE[0], 'whitenoise.middleware.WhiteNoiseMiddleware']
+            + _MIDDLEWARE_BASE[1:]
+        )
 
-MEDIA_STORAGE_BACKEND = os.getenv('MEDIA_STORAGE_BACKEND', '').strip()
-if not MEDIA_STORAGE_BACKEND:
-    if AWS_STORAGE_BUCKET_NAME:
-        MEDIA_STORAGE_BACKEND = 'storages.backends.s3.S3Storage'
-    elif all(CLOUDINARY_STORAGE.values()):
-        MEDIA_STORAGE_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage'
-    else:
-        MEDIA_STORAGE_BACKEND = 'django.core.files.storage.FileSystemStorage'
+WHITENOISE_MANIFEST_STRICT = False
 
-# Modern Django Storage Configuration
-IS_TESTING = 'test' in sys.argv
-STATICFILES_BACKEND = (
-    "django.contrib.staticfiles.storage.StaticFilesStorage"
-    if DEBUG or IS_TESTING
-    else "whitenoise.storage.CompressedManifestStaticFilesStorage"
-)
+# ── Media files ───────────────────────────────────────────────────────────────
+if _USE_S3_MEDIA:
+    _media_domain = AWS_S3_CUSTOM_DOMAIN or f'{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com'
+    MEDIA_URL = f'https://{_media_domain}/media/'
+    _MEDIA_BACKEND = 'Rasayam_website.storages.S3MediaStorage'
+elif _USE_CLOUDINARY:
+    MEDIA_URL = '/media/'
+    _MEDIA_BACKEND = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+else:
+    MEDIA_URL = '/media/'
+    _MEDIA_BACKEND = 'django.core.files.storage.FileSystemStorage'
 
 STORAGES = {
-    "default": {
-        "BACKEND": MEDIA_STORAGE_BACKEND,
-    },
-    "staticfiles": {
-        "BACKEND": STATICFILES_BACKEND,
-    },
+    'default': {'BACKEND': _MEDIA_BACKEND},
+    'staticfiles': {'BACKEND': _STATICFILES_BACKEND},
 }
-
-# Safe fallback protection rule
-WHITENOISE_MANIFEST_STRICT = False
 
 # ==========================================
 # THIRD-PARTY & CUSTOM SETTINGS
@@ -321,6 +341,7 @@ WHITENOISE_MANIFEST_STRICT = False
 # Razorpay Keys
 RAZORPAY_KEY_ID = os.getenv('RAZORPAY_KEY_ID')
 RAZORPAY_KEY_SECRET = os.getenv('RAZORPAY_KEY_SECRET')
+RAZORPAY_WEBHOOK_SECRET = os.getenv('RAZORPAY_WEBHOOK_SECRET')
 
 LOGIN_URL = 'login'
 

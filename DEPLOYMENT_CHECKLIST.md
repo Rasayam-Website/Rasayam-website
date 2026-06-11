@@ -1,225 +1,114 @@
-# 🚀 Deployment Checklist - Rasayam Website Performance Optimizations
+# Rasayam — Production Deployment Checklist
 
-## Pre-Deployment Testing
-
-- [x] All unit tests passing (9/9) ✅
-- [x] No syntax errors in modified files ✅
-- [x] Database migrations created and tested ✅
-- [x] New dependencies added to requirements.txt ✅
-
-## Local Development Setup
-
-```bash
-# Install new packages
-pip install -r requirements.txt
-
-# Run migrations
-python manage.py migrate
-
-# Test the application locally
-python manage.py runserver
-
-# Run tests
-python manage.py test products.tests -v 2
-```
-
-## Pre-Production (Staging) Checklist
-
-- [ ] Pull latest code with optimizations
-- [ ] Install dependencies: `pip install -r requirements.txt`
-- [ ] Run migrations: `python manage.py migrate`
-- [ ] Test all critical endpoints:
-  - [ ] Homepage (/)
-  - [ ] Shop (/shop)
-  - [ ] Search (/search?q=test)
-  - [ ] Product detail (/product/1/)
-  - [ ] Cart (/cart)
-  - [ ] Authentication (login/register)
-  - [ ] About (/about/)
-  - [ ] Contact (/contact)
-- [ ] Load test with 50 concurrent users for 5 minutes
-- [ ] Verify search results pagination
-- [ ] Test rate limiting (attempt >30 requests in 1 minute)
-- [ ] Check cache hit ratio (if Redis configured)
-
-## Production Deployment
-
-### Step 1: Prepare Environment
-```bash
-# Set these environment variables in your production environment
-export DEBUG=False
-export STRICT_PRODUCTION_ENV=True
-export REDIS_URL="redis://username:password@hostname:6379/0"
-export CACHE_MIDDLEWARE_SECONDS=300
-export SLOW_QUERY_THRESHOLD=1000
-# Keep existing vars like DATABASE_URL, SECRET_KEY, etc.
-```
-
-### Step 2: Deploy Code
-```bash
-# Pull the latest code
-git pull origin main
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Collect static files
-python manage.py collectstatic --noinput
-
-# Run database migrations
-python manage.py migrate
-```
-
-### Step 3: Verify Deployment
-```bash
-# Check system
-python manage.py check
-
-# Run tests
-python manage.py test products.tests
-
-# Restart application server
-# For Render: automatic restart
-# For Heroku: heroku restart
-# For AWS: deploy new version
-```
-
-### Step 4: Monitor Performance
-- [ ] Monitor error rates (target: <1% 5xx errors)
-- [ ] Check cache hit ratio (target: >50%)
-- [ ] Monitor database connection count (target: <20)
-- [ ] Track page load times (target: <1s avg)
-- [ ] Verify rate limiting works (429 responses)
-
-## Post-Deployment Validation
-
-### Health Checks
-```bash
-# Test homepage loads
-curl https://your-domain.com/
-
-# Test search works
-curl https://your-domain.com/search?q=test
-
-# Test API endpoints return 200
-curl https://your-domain.com/api/products/
-
-# Verify no 5xx errors
-# Check application logs for errors
-```
-
-### Performance Validation
-```bash
-# Load test (requires Apache Bench or Siege)
-ab -c 50 -t 60 https://your-domain.com/
-# Expected: >100 requests/second
-
-# Or with Siege for varied endpoints
-siege -c 50 -r 10 -f urls.txt
-```
-
-### Cache Verification (if Redis)
-```bash
-# SSH into Redis instance
-redis-cli -h your-redis-host
-
-# Check cache stats
-INFO stats
-
-# Calculate hit rate: hits / (hits + misses)
-# Target: >50% hit rate
-```
-
-## Rollback Plan
-
-If issues occur after deployment:
-
-### Quick Rollback (Code Only)
-```bash
-# Revert to previous version
-git revert HEAD
-git push origin main
-
-# Redeploy (automatic on Render/Heroku)
-# Or manually restart on AWS
-```
-
-### Full Rollback (Code + Database)
-```bash
-# Revert database to previous version
-python manage.py migrate products 0010_order_original_cart_items
-
-# Revert code
-git revert HEAD
-git push origin main
-
-# Restart application
-```
-
-### Troubleshooting
-
-**Issue**: Cache not working
-- Solution: Check REDIS_URL is set correctly
-- Solution: Verify Redis server is running
-- Solution: Check firewall allows connection to Redis
-
-**Issue**: Rate limiting too strict
-- Solution: Adjust rate limits in views.py
-- Solution: Check client IP is not being blocked
-
-**Issue**: Database slow queries
-- Solution: Run `SELECT query, mean_exec_time FROM pg_stat_statements ORDER BY mean_exec_time DESC;`
-- Solution: Check if new indexes are being used: `EXPLAIN ANALYZE`
-
-**Issue**: Tests failing
-- Solution: Check all dependencies installed: `pip install -r requirements.txt`
-- Solution: Run migrations: `python manage.py migrate`
-- Solution: Check database connection
-
-**Issue**: 500 errors in production
-- Solution: Check logs for errors
-- Solution: Verify environment variables set
-- Solution: Check database connection string
-- Solution: Verify Redis connection (if configured)
-
-## Performance Metrics to Track
-
-### Weekly Monitoring
-- [ ] Error rate (< 1%)
-- [ ] Average response time (< 500ms)
-- [ ] Database query count (< 10 per request)
-- [ ] Cache hit ratio (> 50%)
-- [ ] Concurrent users handled (> 1000)
-
-### Monthly Review
-- [ ] Identify slow queries
-- [ ] Review rate limit effectiveness
-- [ ] Check cache efficiency
-- [ ] Plan scaling if needed
-
-## Escalation Contacts
-
-For production issues:
-- Database issues: Contact your database provider
-- Redis issues: Check Redis provider dashboard
-- Application errors: Check application logs
-- DNS issues: Contact domain registrar
-
-## Success Criteria
-
-✅ All tests passing
-✅ Homepage loads in <500ms
-✅ Search works with pagination
-✅ No 5xx errors in logs
-✅ Cache hit ratio >50%
-✅ Rate limiting prevents spam (429 responses)
-✅ Can handle 1000+ concurrent users
-✅ Database connections < 20
+**Last Updated**: June 11, 2026  
+**Status**: ✅ All pre-deployment work complete. Ready for AWS push.
 
 ---
 
-**Deployment Date**: ___________  
-**Deployed By**: ___________  
-**Status**: [ ] Successful [ ] Issues Found  
-**Notes**: ___________________________________________
+## Pre-Flight: Code & Database
 
+- [x] All Python files compile without errors
+- [x] `python manage.py check` → 0 issues
+- [x] Migration 0013 applied (OTPToken table)
+- [x] Migration 0014 applied (Product.stock, Order.shipping_address, Order.transaction_id)
+- [x] All 33 packages pinned in `requirements.txt`
+- [x] `django-storages[boto3]==1.14.6` installed
+
+---
+
+## Pre-Flight: Environment Variables
+
+Copy `.env.example` and fill every value before deploying.
+
+- [ ] `SECRET_KEY` — long random string, never reuse dev key
+- [ ] `DEBUG=False`
+- [ ] `STRICT_PRODUCTION_ENV=True`
+- [ ] `ALLOWED_HOSTS` — domain + ALB DNS
+- [ ] `CSRF_TRUSTED_ORIGINS` — `https://rasayam.com,https://www.rasayam.com`
+- [ ] `SECURE_SSL_REDIRECT=True`
+- [ ] `SECURE_HSTS_SECONDS=31536000`
+- [ ] `DATABASE_URL` — RDS PostgreSQL connection string
+- [ ] `REDIS_URL` — ElastiCache endpoint
+- [ ] `AWS_STORAGE_BUCKET_NAME` — media S3 bucket
+- [ ] `AWS_STATIC_BUCKET_NAME` — static S3 bucket (can be same bucket)
+- [ ] `AWS_S3_REGION_NAME=ap-south-1`
+- [ ] `RAZORPAY_KEY_ID` — live key (starts `rzp_live_`)
+- [ ] `RAZORPAY_KEY_SECRET`
+- [ ] `RAZORPAY_WEBHOOK_SECRET` — from Razorpay Dashboard → Webhooks
+
+---
+
+## AWS Infrastructure Setup
+
+- [ ] RDS PostgreSQL instance created (ap-south-1, Multi-AZ recommended)
+- [ ] S3 bucket `rasayam-media-prod` created, CORS policy set
+- [ ] S3 bucket `rasayam-static-prod` created, public-read for `static/*`
+- [ ] ElastiCache Redis cluster created
+- [ ] ECR repository created: `rasayam-website`
+- [ ] ECS cluster + task definition created (or App Runner service)
+- [ ] IAM task role with S3 read/write policy attached to ECS task
+- [ ] ALB created, target group pointing to ECS service on port 8000
+- [ ] ACM certificate issued for `rasayam.com` + `www.rasayam.com`
+- [ ] Route 53 A records → ALB DNS
+
+---
+
+## Deployment Sequence
+
+```bash
+# 1. Build & push image
+docker build -t rasayam-website .
+docker tag rasayam-website <ecr-uri>:latest
+docker push <ecr-uri>:latest
+
+# 2. Run migrations (one-off ECS task)
+python manage.py migrate --noinput
+
+# 3. Deploy new ECS task revision (or trigger App Runner redeploy)
+```
+
+---
+
+## Post-Deployment Verification
+
+```bash
+# Health check (must return 200 with all three checks ok)
+curl https://rasayam.com/health/
+# {"status":"ok","checks":{"db":"ok","cache":"ok","s3":"ok"}}
+
+# Smoke tests
+curl -L https://rasayam.com/              # Homepage
+curl -L https://rasayam.com/shop/         # Shop
+curl -L https://rasayam.com/search?q=saree  # Search
+curl -L https://rasayam.com/admin/        # Admin login page
+```
+
+- [ ] `/health/` returns `{"status":"ok"}` with all checks green
+- [ ] Homepage loads with banners and products
+- [ ] Product detail page loads with gallery images from S3
+- [ ] Cart add/update/remove works (JSON API)
+- [ ] OTP login flow completes end-to-end
+- [ ] Checkout creates order, Razorpay payment page opens
+- [ ] Webhook endpoint reachable at `POST /webhooks/razorpay/`
+- [ ] Admin panel loads at `/admin/`
+- [ ] Static assets served from S3 URL (not `/static/`)
+- [ ] No 5xx errors in CloudWatch Logs for first 10 minutes
+
+---
+
+## Razorpay Webhook Setup
+
+- [ ] Dashboard → Settings → Webhooks → Add endpoint: `https://rasayam.com/webhooks/razorpay/`
+- [ ] Events: `payment.captured` ✓
+- [ ] Copy webhook secret → set `RAZORPAY_WEBHOOK_SECRET` in environment
+- [ ] Test with Razorpay test payment → confirm order flips to `Paid` in admin
+
+---
+
+## Rollback Plan
+
+| Scenario | Action |
+|---|---|
+| Bad code deploy | Redeploy previous ECR image tag in ECS |
+| Migration broke DB | `python manage.py migrate products 0012_...`; redeploy previous image |
+| Env var missing | Update ECS task definition env; force new deployment |

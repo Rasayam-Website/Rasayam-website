@@ -1,26 +1,31 @@
 import json
-import random
+import hmac
+import hashlib
+import secrets
 import razorpay
-from datetime import timedelta
 from django.conf import settings
+from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.cache import cache_page
+from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, F
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django_ratelimit.decorators import ratelimit
 from .models import (
-    Product, Banner, Category, PromoBox, 
+    Product, Banner, Category, PromoBox,
     CustomerProfile, ContactInquiry, Order, OrderItem, Review,
     Cart, CartItem,
-    Wishlist, WishlistItem
+    Wishlist, WishlistItem,
+    OTPToken,
 )
+from .otp_gateway import send_otp
+from . import session_cart as guest_cart
 
 def get_selected_size_from_request(request, product):
     selected_size = (
@@ -230,87 +235,117 @@ def product_detail_view_slug(request, slug):
 
 # --- 3. Authentication Views ---
 
-@ratelimit(key='ip', rate='5/m', method='POST')  # Prevent brute force
+def _issue_otp(profile: CustomerProfile) -> OTPToken:
+    """Invalidate any live token and issue a fresh one."""
+    profile.otp_tokens.filter(is_used=False).update(is_used=True)
+    token = OTPToken.objects.create(
+        profile=profile,
+        token=str(secrets.randbelow(900000) + 100000),  # cryptographically random 6-digit
+        expires_at=timezone.now() + timezone.timedelta(minutes=OTPToken.EXPIRY_MINUTES),
+    )
+    send_otp(profile.phone_number, token.token)
+    return token
+
+
+@ratelimit(key='ip', rate='5/m', method='POST')
 def register_view(request):
     if request.method == 'POST':
-        phone = request.POST.get('phone')
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        gender = request.POST.get('gender')
-        city = request.POST.get('city')
-        
+        phone = request.POST.get('phone', '').strip()
+        username = request.POST.get('username', '').strip()
+        email = request.POST.get('email', '').strip()
+
         user, created = User.objects.get_or_create(username=username)
         if created:
             user.email = email
-            user.set_password('temp_pass_123')
+            user.set_unusable_password()
             user.save()
-            
+
         profile, _ = CustomerProfile.objects.get_or_create(user=user)
         profile.phone_number = phone
         profile.email = email
-        profile.gender = gender
-        profile.city = city
-        
-        generated_otp = str(random.randint(100000, 999999))
-        profile.otp = generated_otp
-        profile.otp_created_at = timezone.now()
+        profile.gender = request.POST.get('gender', '')
+        profile.city = request.POST.get('city', '')
         profile.save()
-        
-        # DEBUG MODE: Check your terminal for the code
-        print(f"--- OTP FOR {username} ({phone}): {generated_otp} ---")
-        
+
+        _issue_otp(profile)
         return redirect('verify_otp', phone_number=phone)
-        
+
     return render(request, 'products/register.html')
 
-@ratelimit(key='ip', rate='5/m', method='POST')  # Prevent brute force
+
+@ratelimit(key='ip', rate='5/m', method='POST')
 def login_view(request):
-    if request.method == "POST":
-        phone = request.POST.get('phone_number')
+    if request.method == 'POST':
+        phone = request.POST.get('phone_number', '').strip()
         try:
             profile = CustomerProfile.objects.get(phone_number=phone)
-            new_otp = str(random.randint(100000, 999999))
-            profile.otp = new_otp
-            profile.otp_created_at = timezone.now()
-            profile.save()
-            
-            # DEBUG MODE: Check your terminal for the code
-            print(f"DEBUG: OTP for {phone} is {new_otp}")
-            
-            return redirect('verify_otp', phone_number=phone)
-            
         except CustomerProfile.DoesNotExist:
             messages.error(request, "This phone number isn't registered yet.")
             return redirect('register')
 
+        _issue_otp(profile)
+        return redirect('verify_otp', phone_number=phone)
+
     return render(request, 'products/login.html')
 
-@ratelimit(key='ip', rate='10/m', method='POST')  # Rate limit OTP attempts
+
+@ratelimit(key='ip', rate='10/m', method='POST')
 def verify_otp(request, phone_number):
     profile = get_object_or_404(CustomerProfile, phone_number=phone_number.strip())
-    
+    otp_obj = profile.otp_tokens.filter(is_used=False).first()
+
     if request.method == 'POST':
-        user_otp = request.POST.get('otp', '').strip()
-        db_otp = (profile.otp or '').strip()
+        # Guard: no active token at all
+        if not otp_obj or not otp_obj.is_valid():
+            messages.error(request, "OTP expired or already used. Request a new one.")
+            return redirect('login')
 
-        # Check OTP expiry (5 minutes)
-        if profile.otp_created_at:
-            elapsed = timezone.now() - profile.otp_created_at
-            if elapsed > timedelta(minutes=5):
-                messages.error(request, "OTP expired. Request a new one.")
-                return redirect('login')
+        submitted = request.POST.get('otp', '').strip()
+        otp_obj.attempts += 1
+        otp_obj.save(update_fields=['attempts'])
 
-        if user_otp == db_otp:
+        if otp_obj.attempts >= OTPToken.MAX_ATTEMPTS:
+            otp_obj.is_used = True
+            otp_obj.save(update_fields=['is_used'])
+            messages.error(request, "Too many incorrect attempts. Please request a new code.")
+            return redirect('login')
+
+        if submitted == otp_obj.token:
+            otp_obj.is_used = True
+            otp_obj.save(update_fields=['is_used'])
             profile.is_verified = True
-            profile.save()
+            profile.save(update_fields=['is_verified'])
             login(request, profile.user)
-            messages.success(request, f"Welcome back, {profile.user.username}!")
+            guest_cart.merge_guest_cart_on_login(request.session, profile.user)
+            messages.success(request, f"Welcome, {profile.user.username}!")
             return redirect('index')
-        else:
-            messages.error(request, "Incorrect OTP. Check your server logs.")
-            return render(request, 'products/verify_otp.html', {'phone': phone_number})
+
+        remaining = OTPToken.MAX_ATTEMPTS - otp_obj.attempts
+        return render(request, 'products/verify_otp.html', {
+            'phone': phone_number,
+            'error': f"Incorrect code. {remaining} attempt{'s' if remaining != 1 else ''} remaining.",
+        })
 
     return render(request, 'products/verify_otp.html', {'phone': phone_number})
+
+
+@ratelimit(key='ip', rate='3/m', method='POST')
+def resend_otp(request, phone_number):
+    """Issues a new OTP, subject to a per-token cooldown to prevent spamming."""
+    profile = get_object_or_404(CustomerProfile, phone_number=phone_number.strip())
+    latest = profile.otp_tokens.first()
+
+    if latest:
+        elapsed = (timezone.now() - latest.created_at).total_seconds()
+        if elapsed < OTPToken.RESEND_COOLDOWN_SECONDS:
+            wait = int(OTPToken.RESEND_COOLDOWN_SECONDS - elapsed)
+            messages.error(request, f"Please wait {wait}s before requesting a new code.")
+            return redirect('verify_otp', phone_number=phone_number)
+
+    _issue_otp(profile)
+    messages.success(request, "A new code has been sent.")
+    return redirect('verify_otp', phone_number=phone_number)
+
 
 def logout_view(request):
     logout(request)
@@ -340,84 +375,121 @@ def profile_view(request):
 # --- 4. Order & Cart Processing (with Razorpay) ---
 
 @login_required
-@ratelimit(key='user', rate='10/h', method='POST')  # Prevent order spam
+@ratelimit(key='user', rate='10/h', method='POST')
 def save_order(request):
+    """
+    Converts the active cart into a pending order and opens a Razorpay payment session.
+
+    Stock deduction happens inside transaction.atomic() with select_for_update() so
+    concurrent requests are serialised at the DB row level — the second request will
+    see the already-decremented stock and return an Out of Stock error instead of
+    overselling.
+    """
+    shipping_address = request.POST.get('shipping_address', '').strip()
+
     cart = get_object_or_404(Cart, user=request.user)
-    # Optimize query with select_related
-    cart_items = list(
-        cart.items.select_related('product').prefetch_related('product__sizes')
-    )
+    cart_items = list(cart.items.select_related('product').prefetch_related('product__sizes'))
 
     if not cart_items:
         messages.error(request, "Your bag is empty.")
         return redirect('shop')
 
-    total_amount = sum(item.total_item_price for item in cart_items)
-
     try:
         razorpay_client = get_razorpay_client()
     except ValueError as e:
-        messages.error(request, f"Gateway Error: {str(e)}")
+        messages.error(request, f"Gateway Error: {e}")
         return redirect('cart')
 
-    original_cart_items = []
-    for item in cart_items:
-        # Validate size is still available before the order is created.
-        if item.selected_size and not item.product.sizes.filter(name=item.selected_size).exists():
-            messages.error(request, f"Size {item.selected_size} is no longer available. Please update your selection.")
-            return redirect('cart')
-
-        original_cart_items.append({
-            'cart_item_id': item.id,
-            'product_id': item.product_id,
-            'product_name': item.product.name,
-            'selected_size': item.selected_size,
-            'quantity': item.quantity,
-            'price': str(item.unit_price),
-        })
-
-    # 1. Create the Order record (status stays 'Pending')
-    order = Order.objects.create(
-        user=request.user,
-        total_amount=total_amount,
-        status='Pending',
-        original_cart_items=original_cart_items,
-    )
-
-    for item in cart_items:
-        OrderItem.objects.create(
-            order=order,
-            product_name=item.product.name,
-            selected_size=item.selected_size,
-            price=item.unit_price,
-            quantity=item.quantity,
-            image_url=item.product.image.url if item.product.image else ""
-        )
-
-    amount_in_paise = int(total_amount * 100)
-    payment_data = {
-        "amount": amount_in_paise,
-        "currency": "INR",
-        "receipt": f"rasayam_order_{order.id}",
-    }
-
+    # ── Atomic block: validate sizes, check & deduct stock, create order ──────
     try:
-        razorpay_order = razorpay_client.order.create(data=payment_data)
-        order.razorpay_order_id = razorpay_order['id']
-        order.save()
+        with transaction.atomic():
+            # Lock every product row involved in this order for the duration of
+            # the transaction. Any concurrent checkout for the same products will
+            # block here until this transaction commits or rolls back.
+            product_ids = [item.product_id for item in cart_items]
+            locked_products = {
+                p.pk: p
+                for p in Product.objects.select_for_update().filter(pk__in=product_ids)
+            }
 
-        # --- IMPORTANT: REMOVED cart_items.delete() FROM HERE ---
-        # Items stay in cart until payment_verify confirms success.
+            original_cart_items = []
+            for item in cart_items:
+                product = locked_products[item.product_id]
 
-        return render(request, 'products/payment.html', {
-            'order': order,
-            'razorpay_order_id': razorpay_order['id'],
-            'razorpay_key_id': settings.RAZORPAY_KEY_ID,
-            'amount': amount_in_paise,
-        })
-    except Exception as e:
-        messages.error(request, f"Gateway Error: {str(e)}")
+                # Size still available?
+                if item.selected_size and not product.sizes.filter(name=item.selected_size).exists():
+                    raise ValueError(f"Size {item.selected_size} for '{product.name}' is no longer available.")
+
+                # Enough stock?
+                if product.stock < item.quantity:
+                    available = product.stock
+                    raise ValueError(
+                        f"Only {available} unit{'s' if available != 1 else ''} of "
+                        f"'{product.name}' left in stock."
+                    )
+
+                product.stock -= item.quantity
+                product.save(update_fields=['stock'])
+
+                original_cart_items.append({
+                    'cart_item_id': item.id,
+                    'product_id': product.pk,
+                    'product_name': product.name,
+                    'selected_size': item.selected_size,
+                    'quantity': item.quantity,
+                    'price': str(item.unit_price),
+                })
+
+            total_amount = sum(item.total_item_price for item in cart_items)
+            order = Order.objects.create(
+                user=request.user,
+                total_amount=total_amount,
+                status='Pending',
+                shipping_address=shipping_address,
+                original_cart_items=original_cart_items,
+            )
+            for item in cart_items:
+                product = locked_products[item.product_id]
+                OrderItem.objects.create(
+                    order=order,
+                    product_name=product.name,
+                    selected_size=item.selected_size,
+                    price=item.unit_price,
+                    quantity=item.quantity,
+                    image_url=product.image.url if product.image else '',
+                )
+
+    except ValueError as stock_error:
+        messages.error(request, str(stock_error))
         return redirect('cart')
+
+    # ── Create Razorpay order (outside the DB transaction — network call) ─────
+    amount_in_paise = int(order.total_amount * 100)
+    try:
+        razorpay_order = razorpay_client.order.create(data={
+            "amount": amount_in_paise,
+            "currency": "INR",
+            "receipt": f"rasayam_{order.id}",
+        })
+        order.razorpay_order_id = razorpay_order['id']
+        order.save(update_fields=['razorpay_order_id'])
+    except Exception as e:
+        # Order was created but gateway failed — restore stock and delete order.
+        with transaction.atomic():
+            for item in order.items.all():
+                Product.objects.filter(name=item.product_name).update(
+                    stock=F('stock') + item.quantity
+                )
+        order.delete()
+        messages.error(request, f"Payment gateway error: {e}")
+        return redirect('cart')
+
+    return render(request, 'products/payment.html', {
+        'order': order,
+        'razorpay_order_id': razorpay_order['id'],
+        'razorpay_key_id': settings.RAZORPAY_KEY_ID,
+        'amount': amount_in_paise,
+    })
 
 
 def clear_paid_cart_items(cart, order):
@@ -508,9 +580,71 @@ def payment_verify(request):
     return redirect('shop')
 
 
+@csrf_exempt
+def razorpay_webhook(request):
+    """
+    Razorpay server-to-server webhook receiver.
+
+    Security: CSRF exemption is intentional — this endpoint is called by
+    Razorpay's servers which have no CSRF cookie. Authentication is provided
+    entirely by HMAC-SHA256 signature verification against RAZORPAY_WEBHOOK_SECRET.
+
+    Razorpay Dashboard → Settings → Webhooks → Add new endpoint:
+      URL : https://rasayam.com/webhooks/razorpay/
+      Events: payment.captured
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    webhook_secret = settings.RAZORPAY_WEBHOOK_SECRET
+    if not webhook_secret:
+        return JsonResponse({'error': 'Webhook secret not configured'}, status=500)
+
+    # 1. Verify HMAC-SHA256 signature
+    received_sig = request.headers.get('X-Razorpay-Signature', '')
+    body = request.body
+    expected_sig = hmac.new(
+        webhook_secret.encode('utf-8'),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected_sig, received_sig):
+        return JsonResponse({'error': 'Invalid signature'}, status=400)
+
+    # 2. Parse event
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    event = payload.get('event')
+    if event != 'payment.captured':
+        # Acknowledge unhandled events without error so Razorpay stops retrying
+        return JsonResponse({'status': 'ignored'})
+
+    # 3. Flip order to Paid
+    try:
+        payment_entity = payload['payload']['payment']['entity']
+        razorpay_order_id = payment_entity.get('order_id')
+        payment_id = payment_entity.get('id')
+
+        order = Order.objects.get(razorpay_order_id=razorpay_order_id)
+        if not order.is_paid:
+            order.is_paid = True
+            order.status = 'Paid'
+            order.razorpay_payment_id = payment_id
+            order.transaction_id = payment_id  # populate unique transaction_id
+            order.save(update_fields=['is_paid', 'status', 'razorpay_payment_id', 'transaction_id'])
+    except (Order.DoesNotExist, KeyError):
+        # Return 200 so Razorpay doesn't keep retrying for unknown orders
+        return JsonResponse({'status': 'order_not_found'})
+
+    return JsonResponse({'status': 'ok'})
+
+
 @login_required
-def order_detail_view(request, order_id):
-    # This prevents users from accessing an unpaid order detail page via a direct URL
+def order_detail_view(request, order_id):    # This prevents users from accessing an unpaid order detail page via a direct URL
     order = get_object_or_404(Order, id=order_id, user=request.user, is_paid=True)
     return render(request, 'products/order_detail.html', {'order': order})
 
@@ -552,14 +686,81 @@ def add_to_cart_ajax(request, product_id):
     selected_size = get_selected_size_from_request(request, product)
     cart, _ = Cart.objects.get_or_create(user=request.user)
     add_product_to_cart(cart, product, selected_size)
-    
+
     total_count = sum(item.quantity for item in cart.items.all())
-    
     return JsonResponse({
         'status': 'success',
         'cart_count': total_count,
         'selected_size': selected_size,
-        'message': f"{product.name} added."
+        'message': f"{product.name} added.",
+    })
+
+
+@login_required
+def cart_detail_api(request):
+    """GET /api/cart/ — full cart state as JSON for frontend re-renders."""
+    cart, _ = Cart.objects.get_or_create(user=request.user)
+    items = []
+    for item in cart.items.select_related('product'):
+        items.append({
+            'id': item.id,
+            'product_id': item.product_id,
+            'product_name': item.product.name,
+            'selected_size': item.selected_size,
+            'quantity': item.quantity,
+            'unit_price': str(item.unit_price),
+            'total_price': str(item.total_item_price),
+            'image_url': item.product.image.url if item.product.image else '',
+        })
+    return JsonResponse({
+        'items': items,
+        'total': str(cart.total_price),
+        'count': sum(i['quantity'] for i in items),
+    })
+
+
+@login_required
+def update_cart_item(request, item_id):
+    """POST /api/cart/update/<id>/ — body: {quantity: int}. 0 removes the item."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        quantity = int(data.get('quantity', 1))
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid payload'}, status=400)
+
+    cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
+
+    if quantity <= 0:
+        cart_item.delete()
+    else:
+        cart_item.quantity = quantity
+        cart_item.save(update_fields=['quantity'])
+
+    cart = Cart.objects.get(user=request.user)
+    return JsonResponse({
+        'status': 'ok',
+        'cart_total': str(cart.total_price),
+        'cart_count': sum(i.quantity for i in cart.items.all()),
+    })
+
+
+@login_required
+def remove_cart_item_api(request, item_id):
+    """DELETE /api/cart/remove/<id>/"""
+    if request.method not in ('POST', 'DELETE'):
+        return JsonResponse({'error': 'POST or DELETE required'}, status=405)
+
+    cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
+    cart_item.delete()
+
+    cart = Cart.objects.get(user=request.user)
+    return JsonResponse({
+        'status': 'ok',
+        'cart_total': str(cart.total_price),
+        'cart_count': sum(i.quantity for i in cart.items.all()),
     })
 
 @login_required
