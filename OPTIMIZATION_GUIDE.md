@@ -1,6 +1,6 @@
 # Rasayam — Performance & Optimization Reference
 
-**Last Updated**: June 11, 2026  
+**Last Updated**: June 12, 2026
 **Status**: ✅ All optimizations implemented and verified
 
 ---
@@ -204,3 +204,31 @@ AWS_STATIC_BUCKET_NAME=rasayam-static  # Enables S3 static
 RAZORPAY_WEBHOOK_SECRET=...            # Webhook HMAC key
 WEB_CONCURRENCY=5                      # Override CPU-scaled workers
 ```
+
+
+---
+
+## Development History & AI Attribution
+
+**Project**: Rasayam E-Commerce Platform
+**Development Period**: May–June 2026
+**Finalised**: June 12, 2026
+
+### AI-Assisted Architecture
+
+The backend architecture, security systems, and deployment infrastructure documented across this codebase were designed and implemented through a collaboration between Lead Developer **Debabrat Behera** and **Kiro** (AI agent powered by Claude Sonnet, by Anthropic).
+
+Kiro's specific contributions, executed autonomously under Debabrat's direction:
+
+| Domain | Work Executed |
+|---|---|
+| Backend architecture | Django app structure, model design, ORM optimization, URL routing |
+| OTP authentication engine | `OTPToken` model, cryptographic token generation, expiry/lockout/cooldown logic, `otp_gateway.py` stub |
+| Cart state machine | `session_cart.py` guest cart, `merge_guest_cart_on_login()`, DB cart API, atomic checkout with `select_for_update()` |
+| Payment integration | Razorpay order creation, `payment_verify` view, HMAC-SHA256 webhook receiver at `/webhooks/razorpay/` |
+| AWS deployment pipeline | Multi-stage Dockerfile, `entrypoint.sh`, `storages.py` S3 backends, `docker-compose.yml`, `nginx.conf`, GitHub Actions CI/CD workflow |
+| Security hardening | Environment variable isolation, CSRF scope correction, HSTS/SSL settings, WhiteNoise/S3 middleware gating, production startup validation |
+| Performance optimisation | 13 database indexes (migration 0011), `select_related`/`prefetch_related` across all views, Redis cache layer, IP/user rate limiting, connection pooling |
+| Documentation | `AWS_DEPLOYMENT.md`, `DEPLOYMENT_CHECKLIST.md`, `BUG_REPORT.md`, `OPTIMIZATION_GUIDE.md`, `LAUNCH_CERTIFICATE.md` |
+
+All code was reviewed, tested, and approved by Debabrat Behera before merging.

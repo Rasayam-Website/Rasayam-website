@@ -1,0 +1,38 @@
+services:
+  web:
+    # In production the CI pipeline pushes to ECR and sets IMAGE_URL.
+    # Locally, fall back to building from source.
+    image: ${IMAGE_URL:-rasayam-website:local}
+    build: .
+    env_file: .env
+    expose:
+      - "8000"
+    restart: unless-stopped
+    depends_on:
+      - db
+    volumes:
+      - static_volume:/app/staticfiles
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env                    # expects POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/rasayam.conf:ro
+      - static_volume:/app/staticfiles:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro   # Let's Encrypt certs (host-managed)
+
+volumes:
+  postgres_data:
+  static_volume:
