@@ -47,6 +47,22 @@
     </style>
 </head>
 <body>
+    {% if messages %}
+    <div class="messages-container" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px;">
+        {% for message in messages %}
+        <div class="message {{ message.tags }}" style="padding: 15px; margin-bottom: 10px; border-radius: 4px; background: #333; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    <script>
+        setTimeout(() => {
+            const msgs = document.querySelector('.messages-container');
+            if (msgs) msgs.style.display = 'none';
+        }, 5000);
+    </script>
+    {% endif %}
+
     <div class="announcement-bar">
         <div class="marquee-content">
             <span>FREE COMPLIMENTARY SHIPPING ON ALL BOUTIQUE ORDERS • </span>

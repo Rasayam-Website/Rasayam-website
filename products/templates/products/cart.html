@@ -2,11 +2,9 @@
 {% load static %}
 
 {% block content %}
-<header class="text-center" style="padding: 60px 0 30px; background: #fff; border-bottom: 1px solid var(--border);">
-    <h2 class="playfair" style="font-size: 2.8rem; margin: 0;">Your Selection</h2>
-    <p style="font-size: 0.65rem; letter-spacing: 3px; color: var(--gold); margin-top: 10px; text-transform: uppercase; font-weight: 600;">
-        Review Before Checkout
-    </p>
+<header style="padding: 70px 0 36px; background: #fff; border-bottom: 1px solid var(--border); text-align: center;">
+    <span style="display: block; font-size: 0.65rem; letter-spacing: 3px; color: var(--gold); text-transform: uppercase; font-weight: 600; margin-bottom: 12px;">Review Before Checkout</span>
+    <h2 class="playfair" style="font-size: clamp(2rem, 5vw, 2.8rem); font-weight: 400; margin: 0;">Your Selection</h2>
 </header>
 
 <section class="container" style="padding: 20px 0 60px;">
@@ -57,33 +55,33 @@
         </div>
 
         {% if cart_items %}
-        <div class="cart-summary" style="flex: 1; background: #fafafa; padding: 40px; border-radius: 2px; position: sticky; top: 100px;">
-            <h3 class="playfair" style="font-size: 1.4rem; margin-bottom: 25px;">Order Summary</h3>
-            
-            <div class="summary-details" style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 25px;">
-                <div style="display: flex; justify-content: space-between;">
-                    <span style="color: #666;">Subtotal</span>
-                    <span>₹{{ total_price|stringformat:"d" }}</span>
+        <div class="cart-summary" style="flex: 1; background: #fff; border: 1px solid var(--border); padding: 40px; position: sticky; top: 100px;">
+            <h3 class="playfair" style="font-size: 1.4rem; font-weight: 400; margin-bottom: 30px; letter-spacing: 0.5px;">Order Summary</h3>
+
+            <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 28px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                    <span style="color: #888; letter-spacing: 0.5px;">Subtotal</span>
+                    <span style="color: var(--royal);">₹{{ total_price|stringformat:"d" }}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span style="color: #666;">Boutique Shipping</span>
-                    <span style="color: var(--gold); font-weight: 700; font-size: 0.7rem; letter-spacing: 1px;">COMPLIMENTARY</span>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                    <span style="color: #888; letter-spacing: 0.5px;">Boutique Shipping</span>
+                    <span style="color: var(--gold); font-weight: 700; font-size: 0.68rem; letter-spacing: 1.5px;">COMPLIMENTARY</span>
                 </div>
             </div>
-            
-            <div style="display: flex; justify-content: space-between; border-top: 1px solid #ddd; padding-top: 20px; margin-top: 20px;">
-                <strong class="playfair" style="font-size: 1.3rem;">Total</strong>
-                <strong style="font-size: 1.3rem; color: var(--gold);">₹{{ total_price|stringformat:"d" }}</strong>
+
+            <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding-top: 22px;">
+                <span class="playfair" style="font-size: 1.25rem; font-weight: 400;">Total</span>
+                <span class="playfair" style="font-size: 1.25rem; color: var(--royal);">₹{{ total_price|stringformat:"d" }}</span>
             </div>
-            
-            <div style="margin-top: 35px; display: flex; flex-direction: column; gap: 12px;">
-                <a href="{% url 'save_order' %}" id="checkout-link" style="text-decoration: none;">
-                    <button class="btn-gold" id="checkout-btn" style="width: 100%; padding: 18px; font-weight: 700; cursor: pointer; border: none; background: #1a1a1a; color: #fff; letter-spacing: 1px;">
+
+            <div style="margin-top: 32px;">
+                <a href="{% url 'save_order' %}" id="checkout-link" style="text-decoration: none; display: block;">
+                    <button id="checkout-btn" class="btn-cart" style="width: 100%; padding: 20px;">
                         PROCEED TO SECURE PAYMENT
                     </button>
                 </a>
-                <p style="font-size: 0.65rem; color: #aaa; text-align: center; margin-top: 10px;">
-                    🔒 Secure checkout powered by Razorpay Encryption
+                <p style="font-size: 0.63rem; color: #bbb; text-align: center; margin-top: 14px; letter-spacing: 0.5px;">
+                    🔒 Powered by Razorpay — 256-bit encryption
                 </p>
             </div>
         </div>

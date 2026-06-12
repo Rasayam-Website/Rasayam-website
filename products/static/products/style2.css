@@ -1042,3 +1042,298 @@ a.btn-cart {
         overflow-wrap: anywhere;
     }
 }
+
+/* =========================================
+   LUXURY REFINEMENTS — June 2026
+   ========================================= */
+
+/* Page entrance fade */
+@keyframes page-enter {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+main { animation: page-enter 0.45s ease forwards; }
+
+/* Focus states — accessible, brand-consistent */
+:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 3px;
+}
+
+/* ---- PRODUCT CARD — DESKTOP ---- */
+.product-card {
+    background: #fff;
+    border: 1px solid transparent;
+    transition: border-color 0.35s ease, box-shadow 0.35s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.product-card:hover {
+    border-color: #e8e0d5;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
+}
+
+/* Image scale on hover */
+.product-card:hover .product-img-wrapper img {
+    transform: scale(1.04);
+}
+
+/* Hover-reveal overlay button */
+.product-img-wrapper .btn-gold {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.product-card:hover .product-img-wrapper .btn-gold {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Product info spacing */
+.product-info {
+    padding: 18px 0 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.product-info h3,
+.product-info .playfair {
+    font-size: 1.05rem;
+    line-height: 1.35;
+    font-weight: 500;
+    color: var(--royal);
+    margin: 0;
+}
+
+.product-info .price,
+.product-info p {
+    font-size: 0.95rem;
+    color: var(--gold);
+    font-weight: 600;
+    margin: 0;
+}
+
+.product-action-container {
+    margin-top: auto;
+    padding-top: 14px;
+}
+
+/* ---- BTN-GOLD ---- */
+.btn-gold {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 28px;
+    background: var(--gold);
+    color: #fff;
+    border: none;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.25s ease, transform 0.2s ease;
+}
+.btn-gold:hover {
+    background: #b8913e;
+    transform: translateY(-1px);
+}
+
+/* ---- SECTION HEADERS ---- */
+.section-header {
+    text-align: center;
+    padding: 70px 0 40px;
+}
+.section-header .eyebrow {
+    display: block;
+    font-size: 0.68rem;
+    letter-spacing: 3px;
+    color: var(--gold);
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+.section-header h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 400;
+    line-height: 1.15;
+    color: var(--royal);
+    margin: 0;
+}
+
+/* ---- WISHLIST ICON ---- */
+.wishlist-icon-wrapper {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.wishlist-icon-wrapper:hover {
+    transform: scale(1.12) !important;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.14) !important;
+}
+
+/* ---- FORM INPUTS — GLOBAL ---- */
+input[type="text"],
+input[type="tel"],
+input[type="email"],
+input[type="number"],
+textarea,
+select {
+    font-family: inherit;
+    border-radius: 0;
+    -webkit-appearance: none;
+}
+
+/* ---- MESSAGES TOAST ---- */
+.messages-container .message {
+    background: var(--royal) !important;
+    border-left: 3px solid var(--gold);
+    border-radius: 0 !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 0.5px;
+}
+
+/* ---- PRODUCT DETAIL RESPONSIVE ---- */
+@media (max-width: 900px) {
+    .product-page-wrapper {
+        grid-template-columns: 1fr !important;
+        gap: 40px !important;
+        padding: 0 20px !important;
+        margin: 30px auto !important;
+    }
+    .product-gallery {
+        flex-direction: column-reverse !important;
+    }
+    .thumb-strip {
+        flex-direction: row !important;
+        overflow-x: auto;
+        gap: 10px !important;
+    }
+    .thumb-strip img {
+        width: 64px !important;
+        height: 84px !important;
+        flex-shrink: 0;
+    }
+    .product-actions-panel {
+        position: static !important;
+    }
+    #mainHeroImage {
+        height: 520px !important;
+    }
+}
+
+@media (max-width: 600px) {
+    #mainHeroImage {
+        height: 400px !important;
+    }
+}
+
+/* ---- CART LAYOUT RESPONSIVE ---- */
+@media (max-width: 860px) {
+    .cart-layout {
+        flex-direction: column !important;
+    }
+    .cart-summary {
+        position: static !important;
+    }
+}
+
+/* ---- OTP / AUTH SCREENS ---- */
+.auth-screen {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    padding: 60px 20px;
+}
+.auth-card {
+    width: 100%;
+    max-width: 420px;
+    border: 1px solid var(--border);
+    padding: 56px 48px;
+    background: #fff;
+}
+.auth-card .eyebrow {
+    display: block;
+    font-size: 0.65rem;
+    letter-spacing: 3px;
+    color: var(--gold);
+    text-transform: uppercase;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 10px;
+}
+.auth-card h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    font-weight: 400;
+    text-align: center;
+    margin-bottom: 8px;
+    color: var(--royal);
+}
+.auth-card .subtitle {
+    text-align: center;
+    font-size: 0.82rem;
+    color: #888;
+    margin-bottom: 36px;
+    line-height: 1.6;
+}
+.auth-card .otp-input {
+    width: 100%;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    text-align: center;
+    font-size: 2rem;
+    letter-spacing: 16px;
+    font-family: 'Poppins', sans-serif;
+    color: var(--royal);
+    background: #fafafa;
+    transition: border-color 0.25s ease, background 0.25s ease;
+    -webkit-appearance: none;
+}
+.auth-card .otp-input:focus {
+    border-color: var(--gold);
+    background: #fff;
+    outline: none;
+}
+.auth-card .error-msg {
+    font-size: 0.78rem;
+    color: #c0392b;
+    text-align: center;
+    margin-bottom: 18px;
+    letter-spacing: 0.3px;
+}
+.auth-card .success-msg {
+    font-size: 0.78rem;
+    color: #27735a;
+    text-align: center;
+    margin-bottom: 18px;
+}
+.auth-card .resend-row {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 0.78rem;
+    color: #aaa;
+}
+.auth-card .resend-row .resend-btn {
+    background: none;
+    border: none;
+    color: var(--gold);
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-family: inherit;
+    text-decoration: underline;
+    padding: 0;
+    transition: color 0.2s;
+}
+.auth-card .resend-btn:hover { color: #9a7030; }
+
+@media (max-width: 480px) {
+    .auth-card { padding: 40px 28px; }
+    .auth-card .otp-input { font-size: 1.6rem; letter-spacing: 12px; }
+}
