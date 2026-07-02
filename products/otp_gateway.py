@@ -23,5 +23,5 @@ def send_otp(phone: str, otp: str) -> None:
     """
     # ── REPLACE THIS BLOCK WITH YOUR GATEWAY ─────────────────────────────────
     logger.info("OTP for %s: %s", phone, otp)
-    print(f"[OTP] {phone} → {otp}")
+    print(f"[OTP] {phone} -> {otp}")
     # ─────────────────────────────────────────────────────────────────────────

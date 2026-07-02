@@ -61,7 +61,9 @@ docker build -t rasayam-website .
 docker tag rasayam-website <ecr-uri>:latest
 docker push <ecr-uri>:latest
 python manage.py migrate --noinput
+
 # Deploy new ECS task revision / trigger App Runner redeploy
+
 ```
 
 ---
@@ -70,7 +72,9 @@ python manage.py migrate --noinput
 
 ```bash
 curl https://rasayam.com/health/
+
 # {"status":"ok","checks":{"db":"ok","cache":"ok","s3":"ok"}}
+
 ```
 
 - [ ] `/health/` → 200 with all three checks green
@@ -99,7 +103,7 @@ curl https://rasayam.com/health/
 ## Rollback
 
 | Scenario | Action |
-|---|---|
+| --- | --- |
 | Bad code deploy | Redeploy previous ECR image tag in ECS |
 | Migration broke DB | `python manage.py migrate products 0012_...`; redeploy previous image |
 | Missing env var | Update ECS task definition env; force new deployment |

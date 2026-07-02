@@ -1,6 +1,6 @@
 # Rasayam — Resolved Issues & Post-Mortem Log
 
-**Last Updated**: June 12, 2026
+**Last Updated**: July 2, 2026
 **Status**: ✅ Zero open bugs. Zero open critical issues. Production cleared.
 
 ---
@@ -8,13 +8,13 @@
 ## Summary
 
 | Severity | Reported | Resolved | Open |
-|---|---|---|---|
-| Critical | 5 | 5 | 0 |
-| High | 6 | 6 | 0 |
-| Medium | 3 | 3 | 0 |
+| --- | --- | --- | --- |
+| Critical | 8 | 8 | 0 |
+| High | 9 | 9 | 0 |
+| Medium | 6 | 6 | 0 |
 | Low | 3 | 3 | 0 |
 | Env / Infra | 10 | 10 | 0 |
-| **Total** | **27** | **27** | **0** |
+| **Total** | **36** | **36** | **0** |
 
 ---
 
@@ -41,6 +41,7 @@
 *Root cause*: No `__str__` method defined on the `OrderItem` model.
 
 *Fix*:
+
 ```python
 def __str__(self):
     return f"{self.quantity}x {self.product_name} - Order {self.order_id}"
@@ -55,18 +56,23 @@ def __str__(self):
 *Root cause*: `OrderItem.unit_price` was read from `Product.price` at order creation time, not at cart-add time.
 
 *Fix*:
+
 - `CartItem.price` now stores the price at the moment the item is added to the cart.
 - `CartItem.unit_price` property returns `self.price` (the snapshot), never the live product price.
 - `Order.original_cart_items` JSONField captures the full cart state at checkout as an immutable audit trail.
 - `clear_paid_cart_items()` scoped only to items in the paid order snapshot — other cart items are untouched.
 
 *Pattern*:
+
 ```python
+
 # On add to cart
+
 cart_item.price = product.price  # snapshot
 cart_item.save()
 
 # On order creation (inside transaction.atomic)
+
 unit_price = cart_item.price  # always snapshot, never Product.price
 ```
 
@@ -79,6 +85,7 @@ unit_price = cart_item.price  # always snapshot, never Product.price
 *Root cause*: `save_order` read stock and checked it in Python, then saved — no database-level lock between the read and the write. Classic TOCTOU race.
 
 *Fix*: Wrapped the entire stock-deduction and order-creation block in `transaction.atomic()` with `select_for_update()`:
+
 ```python
 with transaction.atomic():
     products = Product.objects.select_for_update().filter(pk__in=product_ids)
@@ -88,9 +95,11 @@ with transaction.atomic():
         product.stock = F('stock') - quantity
         product.save(update_fields=['stock'])
 ```
+
 The Razorpay API call was moved **outside** the transaction block to prevent holding a row lock during network I/O.
 
 On gateway failure, stock is rolled back atomically:
+
 ```python
 Product.objects.filter(pk=product.pk).update(stock=F('stock') + quantity)
 ```
@@ -183,6 +192,7 @@ class OTPToken(models.Model):
 ```
 
 Security properties enforced in `verify_otp` view:
+
 - **Expiry**: `if timezone.now() > token.expires_at → reject`
 - **Brute-force lock**: `if token.attempts >= 5 → reject` (incremented on every wrong guess)
 - **Resend cooldown**: 60-second gate in `resend_otp` view
@@ -197,6 +207,7 @@ Legacy `CustomerProfile.otp` and `otp_created_at` fields dropped in the same mig
 *Symptom*: Admin could type `"shiped"` or `"PAYED"` into the status field — no validation, inconsistent downstream logic.
 
 *Fix*: `Order.status` converted to a `CharField(choices=STATUS_CHOICES)`:
+
 ```python
 STATUS_CHOICES = [
     ('Pending', 'Pending'), ('Paid', 'Paid'), ('Processing', 'Processing'),
@@ -248,11 +259,14 @@ STATUS_CHOICES = [
 
 *Fix*: Password percent-encoded as `%40` in the `DATABASE_URL` value only. The raw password in the RDS console and IAM policy remains unchanged.
 
-```
+```text
+
 # Wrong
+
 DATABASE_URL=postgres://user:p@ss@host:5432/db
 
 # Correct
+
 DATABASE_URL=postgres://user:p%40ss@host:5432/db
 ```
 
@@ -301,6 +315,7 @@ DATABASE_URL=postgres://user:p%40ss@host:5432/db
 *Root cause*: `WhiteNoiseMiddleware` was unconditionally inserted into `MIDDLEWARE`.
 
 *Fix*: WhiteNoise is only inserted when `AWS_STATIC_BUCKET_NAME` is unset:
+
 ```python
 if not _USE_S3_STATIC and not DEBUG and not IS_TESTING:
     MIDDLEWARE = [MIDDLEWARE[0], 'whitenoise.middleware.WhiteNoiseMiddleware'] + MIDDLEWARE[1:]
@@ -313,6 +328,7 @@ if not _USE_S3_STATIC and not DEBUG and not IS_TESTING:
 *Symptom*: ALB health checks passed even when RDS was unreachable — the health endpoint returned 200 regardless of actual system state.
 
 *Fix*: Health view now performs live probes:
+
 - **DB**: `connection.ensure_connection()`
 - **Cache**: Redis set + get round-trip
 - **S3**: `boto3.head_bucket()` with 3-second timeout
@@ -344,3 +360,91 @@ None.
 ---
 
 *This log was compiled and all issues were resolved by Kiro (powered by Claude Sonnet) in collaboration with Lead Developer Debabrat Behera, finalised June 12, 2026.*
+
+---
+
+## Part IV — New Findings & Security/Architecture Review (July 2026)
+
+### 1. Critical Vulnerabilities & Security Loopholes
+
+#### **SEC-01 · Account Hijacking & Auth Bypass in Registration**
+
+* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L251-L273) (inside `register_view`)
+* **Symptom/Vulnerability**: An attacker can hijack any account, including the administrator (`username='admin'`), by registering with their username.
+* **Root Cause**: The view utilizes `User.objects.get_or_create(username=username)` without verifying if the user already exists or has an established password/profile. It then retrieves or creates the `CustomerProfile`, overwrites the profile details (including the `phone_number` and `email`) with the attacker's registration input, and issues an OTP. Once verified, `login(request, profile.user)` is executed, logging the attacker into the hijacked account.
+* **Fix**: Validate that the username does not already exist before creating or retrieving a user during registration. Throw a validation error if the username is taken.
+* **Status**: ✅ Resolved on July 2, 2026 by Antigravity (Added check `User.objects.filter(username=username).exists()` and returned a validation error).
+
+#### **SEC-02 · Authentication Denial of Service via Non-Unique Phone Numbers**
+
+* **Location**: [products/models.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/models.py#L7) (`CustomerProfile`) & [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L277-L330) (`login_view`, `verify_otp`, `resend_otp`)
+* **Symptom**: Logging in or requesting/verifying OTPs returns a `500 Server Error` (`MultipleObjectsReturned`) for certain phone numbers.
+* **Root Cause**: The `phone_number` field in the `CustomerProfile` model is not marked as `unique=True`, allowing multiple users to register with the same phone number. However, the login and OTP verification flows query the database using `.get(phone_number=phone)`.
+* **Fix**: Mark `phone_number` as unique in the model (e.g., `unique=True` or handle non-uniqueness gracefully in the query by filtering for the specific username).
+* **Status**: ✅ Resolved on July 2, 2026 by Antigravity (Marked `phone_number` as `unique=True` in `CustomerProfile` and created/applied a database migration).
+
+#### **SEC-03 · Rate Limiting Bypass in OTP Resend**
+
+* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L332-L348) (inside `resend_otp`)
+* **Symptom/Vulnerability**: Rate limiting on the OTP resend endpoint can be completely bypassed by sending GET requests.
+* **Root Cause**: The `@ratelimit` decorator is configured with `method='POST'`. However, `resend_otp` doesn't enforce that the request method is POST. It issues a new OTP and sends it for any HTTP method, including GET.
+* **Fix**: Enforce `POST` request method checking in the view using `@require_POST` or explicit checking:
+* **Status**: ✅ Resolved on July 2, 2026 by Antigravity (Decorated the view with `@require_POST` to enforce only POST requests).
+
+---
+
+### 2. Logical & Business Process Flaws
+
+#### **LOG-01 · Permanent Stock Exhaustion via Abandoned Checkouts**
+
+* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L377-L492) (inside `save_order`)
+* **Symptom**: Inventory stock is depleted indefinitely, leading to artificial "Out of Stock" alerts for other customers.
+* **Root Cause**: Stock deduction happens when the user initiates a checkout (`save_order`) and is redirected to Razorpay. If the user abandons the payment session, the order remains in a `Pending` state, and the decremented stock is never returned to the inventory.
+* **Fix**: Implement a background cron job (or Celery task) to auto-cancel pending orders older than 15–30 minutes and restore their stock levels.
+* **Status**: ✅ Resolved on July 2, 2026 by Antigravity (Created a custom management command `cancel_expired_orders` to cancel pending orders older than 20 minutes and restore their stock).
+
+#### **LOG-02 · Fragile Stock Restoration on Gateway Creation Failure**
+
+* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L476-L485) (inside `save_order` exception block)
+* **Symptom**: Stock restoration fails or restores stock on the wrong items if Razorpay order creation fails.
+* **Root Cause**: The fallback code attempts to restore stock using a name query:
+  `Product.objects.filter(name=item.product_name).update(stock=F('stock') + item.quantity)`
+  Because `name` is not unique on `Product`, this can update multiple items. Furthermore, if the product name was updated in the catalog between checkout and failure, the query matches nothing.
+* **Fix**: Query and restore stock by `id` stored in the `original_cart_items` JSON snapshot, rather than matching by the mutable string name.
+* **Status**: ✅ Resolved on July 2, 2026 by Antigravity (Restored stock by `product_id` key in the `original_cart_items` snapshot in `save_order`).
+
+#### **LOG-03 · Incorrect OTP Validation Attempt Limit Check**
+
+* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L304-L312) (inside `verify_otp`)
+* **Symptom**: A user is only allowed 4 attempts instead of the intended 5, even if the 5th attempt is correct.
+* **Root Cause**: The attempt counter is incremented and validated *before* comparing the submitted OTP value. If `attempts` reaches `MAX_ATTEMPTS` (5), it triggers an immediate redirect/failure block without validating the submitted OTP code.
+* **Fix**: Perform the submitted OTP token check *before* validating the maximum attempt limit, or only increment the counter when the submitted token is incorrect.
+* **Status**: ✅ Resolved on July 2, 2026 by Antigravity (Checks the token first, incrementing attempts and applying validation limit only on incorrect submissions).
+
+---
+
+### 3. Architectural & Performance Pitfalls
+
+#### **PERF-01 · N+1 Queries and DB Write on GET in `cart_count` Context Processor**
+
+* **Location**: [products/context_processors.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/context_processors.py)
+* **Symptom**: Suboptimal database performance on every page render for logged-in users.
+* **Root Cause**: The context processor runs on every request. It executes `Cart.objects.get_or_create(user=request.user)` which issues a DB write (INSERT) on safe GET requests if the cart does not exist. It then loops over and sums quantities, triggering additional query overhead.
+* **Fix**: Use database-level aggregation to count items and avoid creating a Cart object if one does not exist:
+* **Status**: ✅ Resolved on July 2, 2026 by Antigravity (Modified context processor to fetch cart using `.first()` without `get_or_create` and perform a database-level `Sum` aggregation).
+
+#### **PERF-02 · High Risk / Redundant Global Cache Middleware**
+
+* **Location**: [Rasayam_website/settings.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/Rasayam_website/settings.py#L99-L115) (`MIDDLEWARE`)
+* **Symptom**: Risk of caching private data (like user profiles, orders, and carts) and exposing it across different user sessions.
+* **Root Cause**: `UpdateCacheMiddleware` and `FetchFromCacheMiddleware` are loaded globally. This will cache responses globally. While individual views like `index` and `about` are explicitly cached using `@cache_page`, global caching middleware is redundant and raises security concerns.
+* **Fix**: Remove the global cache middlewares from the `MIDDLEWARE` list and rely solely on view-level caching (`@cache_page`) and template fragment caching.
+* **Status**: ✅ Resolved on July 2, 2026 by Antigravity (Removed `UpdateCacheMiddleware` and `FetchFromCacheMiddleware` from settings `_MIDDLEWARE_BASE`).
+
+#### **ARCH-01 · Unreachable Guest Cart Logic (Dead Code)**
+
+* **Location**: [products/session_cart.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/session_cart.py)
+* **Symptom**: Guest cart operations are completely unreachable; guests cannot add items to the cart.
+* **Root Cause**: The codebase features a detailed session-based cart in `session_cart.py`. However, all views for adding to cart (`add_to_cart`, `add_to_cart_ajax`, etc.) require login (`@login_required`), rendering this feature dead code.
+* **Fix**: Remove `@login_required` from the cart views and integrate `session_cart.py` for guest users so they can shop before registering.
+* **Status**: ✅ Resolved on July 2, 2026 by Antigravity (Removed `@login_required` decorator from all cart HTML and API views and implemented guest cart session support).

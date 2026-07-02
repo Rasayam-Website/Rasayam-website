@@ -101,14 +101,12 @@ _MIDDLEWARE_BASE = [
     # WhiteNoise is inserted here only when S3 is NOT serving static files.
     # When S3 is active, static requests go directly to the CDN/S3 URL and
     # WhiteNoise would only add overhead scanning the local staticfiles dir.
-    'django.middleware.cache.UpdateCacheMiddleware',  # Cache middleware (first)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django.middleware.cache.FetchFromCacheMiddleware',  # Cache middleware (last)
 ]
 
 # Resolved below after S3 config is determined.

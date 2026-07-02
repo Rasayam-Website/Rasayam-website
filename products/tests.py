@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth.models import User
-from .models import Cart, CartItem, Category, Order, OrderItem, Product, Size
+from .models import Cart, CartItem, Category, Order, OrderItem, Product, Size, CustomerProfile
 
 class RasayamCoreSystemTests(TestCase):
 
@@ -184,3 +184,156 @@ class RasayamCoreSystemTests(TestCase):
 
         order_response = self.client.get(reverse('order_detail', args=[order.id]))
         self.assertContains(order_response, "Size: M")
+
+    def test_registration_hijack_prevention(self):
+        """Verify registering with an existing username returns an error and does not overwrite user data."""
+        # Create an existing user
+        existing_user = User.objects.create_user(username="target_admin", email="admin@rasayam.com")
+        existing_user.save()
+        
+        # Try to register with the same username
+        response = self.client.post(reverse('register'), {
+            'username': 'target_admin',
+            'phone': '1234567890',
+            'email': 'hacker@rasayam.com',
+            'gender': 'Male',
+            'city': 'Odisha'
+        })
+        
+        # Should render the register page again (not redirect to verification)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Username is already taken.")
+        
+        # Verify the user email was NOT updated/hijacked
+        existing_user.refresh_from_db()
+        self.assertEqual(existing_user.email, "admin@rasayam.com")
+
+    def test_registration_duplicate_phone_prevention(self):
+        """Verify registering with an existing phone number returns an error."""
+        # Create an existing user and profile
+        user = User.objects.create_user(username="user1", email="user1@rasayam.com")
+        CustomerProfile.objects.create(user=user, phone_number="9999999999", email="user1@rasayam.com")
+        
+        # Try to register another user with the same phone number
+        response = self.client.post(reverse('register'), {
+            'username': 'user2',
+            'phone': '9999999999',
+            'email': 'user2@rasayam.com',
+            'gender': 'Female',
+            'city': 'Punjab'
+        })
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This phone number is already registered.")
+
+    def test_resend_otp_post_only(self):
+        """Verify that resend_otp endpoint requires a POST request."""
+        # Create a profile first
+        user = User.objects.create_user(username="otp_user", email="otp@rasayam.com")
+        CustomerProfile.objects.create(user=user, phone_number="8888888888")
+        
+        # GET request should return 405 Method Not Allowed
+        response = self.client.get(reverse('resend_otp', args=["8888888888"]))
+        self.assertEqual(response.status_code, 405)
+        
+        # POST request should succeed/redirect
+        response = self.client.post(reverse('resend_otp', args=["8888888888"]))
+        self.assertEqual(response.status_code, 302)
+
+    def test_cancel_expired_orders_command(self):
+        """Verify cancel_expired_orders command cancels pending orders older than 20 mins and restores stock."""
+        from django.core.management import call_command
+        from django.utils import timezone
+        
+        # Set initial stock
+        self.item_ikat.stock = 10
+        self.item_ikat.save(update_fields=['stock'])
+        
+        # Create user
+        user = User.objects.create_user(username="pending_buyer", password="test-pass-123")
+        
+        # Create order snapshot and order
+        original_cart_items = [
+            {
+                'cart_item_id': 999,
+                'product_id': self.item_ikat.id,
+                'product_name': self.item_ikat.name,
+                'selected_size': '',
+                'quantity': 3,
+                'price': str(self.item_ikat.price),
+            }
+        ]
+        
+        # Deduct stock as save_order view would do
+        self.item_ikat.stock -= 3
+        self.item_ikat.save()
+        
+        order = Order.objects.create(
+            user=user,
+            total_amount=self.item_ikat.price * 3,
+            status='Pending',
+            original_cart_items=original_cart_items
+        )
+        
+        # Set order created_at to 30 minutes ago
+        Order.objects.filter(pk=order.pk).update(created_at=timezone.now() - timezone.timedelta(minutes=30))
+        
+        # Call command
+        call_command('cancel_expired_orders')
+        
+        # Refresh from DB
+        order.refresh_from_db()
+        self.item_ikat.refresh_from_db()
+        
+        # Order should be cancelled and stock restored
+        self.assertEqual(order.status, 'Cancelled')
+        self.assertEqual(self.item_ikat.stock, 10)
+
+    def test_guest_cart_flow(self):
+        """Verify guest user can add, view, and modify items in their session cart."""
+        # 1. Add item to cart
+        response = self.client.post(reverse('add_to_cart', args=[self.item_ikat.id]), {
+            'selected_size': ''
+        })
+        self.assertEqual(response.status_code, 302) # Redirect to referer / shop
+        
+        # Verify item added in session
+        session_cart = self.client.session.get('guest_cart')
+        key = f"{self.item_ikat.id}:"
+        self.assertIn(key, session_cart)
+        self.assertEqual(session_cart[key]['quantity'], 1)
+        
+        # 2. Add via AJAX
+        response = self.client.post(reverse('add_to_cart_ajax', args=[self.item_ikat.id]), {
+            'selected_size': ''
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['cart_count'], 2)
+        
+        # 3. View cart page
+        response = self.client.get(reverse('cart'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Premium Ikat Silk Kurti")
+        self.assertContains(response, "₹9000") # Total price (2 * 4500)
+        
+        # 4. Context processor check
+        self.assertEqual(response.context['cart_count'], 2)
+        
+        # 5. Decrease item
+        import zlib
+        pseudo_id = zlib.crc32(f"{self.item_ikat.id}:".encode('utf-8')) & 0x7fffffff
+        response = self.client.get(reverse('decrease_cart_item', args=[pseudo_id]))
+        self.assertEqual(response.status_code, 302)
+        
+        # Verify quantity decreased
+        session_cart = self.client.session.get('guest_cart')
+        self.assertEqual(session_cart[key]['quantity'], 1)
+        
+        # 6. Remove item
+        response = self.client.get(reverse('remove_from_cart', args=[pseudo_id]))
+        self.assertEqual(response.status_code, 302)
+        
+        # Verify item removed
+        session_cart = self.client.session.get('guest_cart')
+        self.assertNotIn(key, session_cart)
+

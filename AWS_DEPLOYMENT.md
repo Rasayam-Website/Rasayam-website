@@ -7,7 +7,7 @@
 
 ## Architecture
 
-```
+```text
 Internet → Route 53 → ALB (HTTPS/ACM) → ECS Fargate / App Runner
                                                │
                     ┌──────────────────────────┼──────────────────┐
@@ -23,14 +23,14 @@ Internet → Route 53 → ALB (HTTPS/ACM) → ECS Fargate / App Runner
 
 ## Runtime Contract
 
-| Property | Value |
+|Property|Value|
 |---|---|
-| Startup | `sh entrypoint.sh` → collectstatic → migrate (optional) → gunicorn |
-| Workers | `2 × nproc + 1`, capped at 9. Override: `WEB_CONCURRENCY` |
-| Health check | `GET /health/` → 200 `{"status":"ok","checks":{"db":"ok","cache":"ok","s3":"ok"}}` |
-| Static files | `collectstatic` → S3 via `S3StaticStorage`. WhiteNoise only if `AWS_STATIC_BUCKET_NAME` unset. |
-| Media uploads | S3 via `S3MediaStorage` (`media/` prefix in `AWS_STORAGE_BUCKET_NAME`) |
-| Migrations | `RUN_MIGRATIONS_ON_STARTUP=false` for ECS (run as one-off task). `true` OK for App Runner. |
+|Startup|`sh entrypoint.sh` → collectstatic → migrate (optional) → gunicorn|
+|Workers|`2 × nproc + 1`, capped at 9. Override: `WEB_CONCURRENCY`|
+|Health check|`GET /health/` → 200 `{"status":"ok","checks":{"db":"ok","cache":"ok","s3":"ok"}}`|
+|Static files|`collectstatic` → S3 via `S3StaticStorage`. WhiteNoise only if `AWS_STATIC_BUCKET_NAME` unset.`|
+|Media uploads|S3 via `S3MediaStorage` (`media/` prefix in `AWS_STORAGE_BUCKET_NAME`)|
+|Migrations|`RUN_MIGRATIONS_ON_STARTUP=false` for ECS (run as one-off task). `true` OK for App Runner.`|
 
 ---
 
@@ -54,7 +54,9 @@ Internet → Route 53 → ALB (HTTPS/ACM) → ECS Fargate / App Runner
 See `.env.example` for the full list. Minimum production set:
 
 ```bash
+
 # Django
+
 DEBUG=False
 STRICT_PRODUCTION_ENV=True
 SECRET_KEY=<long random string>
@@ -64,17 +66,21 @@ SECURE_SSL_REDIRECT=True
 SECURE_HSTS_SECONDS=31536000
 
 # Database
+
 DATABASE_URL=postgres://user:pass@rds-endpoint.ap-south-1.rds.amazonaws.com:5432/rasayam
 
 # Cache
+
 REDIS_URL=redis://elasticache-endpoint.ap-south-1.cache.amazonaws.com:6379/0
 
 # S3
+
 AWS_STORAGE_BUCKET_NAME=rasayam-media-prod
 AWS_STATIC_BUCKET_NAME=rasayam-static-prod
 AWS_S3_REGION_NAME=ap-south-1
 
 # Payments
+
 RAZORPAY_KEY_ID=rzp_live_...
 RAZORPAY_KEY_SECRET=...
 RAZORPAY_WEBHOOK_SECRET=<from Razorpay Dashboard → Webhooks>
@@ -85,7 +91,9 @@ RAZORPAY_WEBHOOK_SECRET=<from Razorpay Dashboard → Webhooks>
 ## Deployment Steps
 
 ```bash
+
 # 1. Build & push to ECR
+
 docker build -t rasayam-website .
 aws ecr get-login-password --region ap-south-1 | \
   docker login --username AWS --password-stdin <account>.dkr.ecr.ap-south-1.amazonaws.com
@@ -93,13 +101,17 @@ docker tag rasayam-website <account>.dkr.ecr.ap-south-1.amazonaws.com/rasayam-we
 docker push <account>.dkr.ecr.ap-south-1.amazonaws.com/rasayam-website:latest
 
 # 2. Run migrations (one-off ECS task)
+
 python manage.py migrate --noinput
 
 # 3. Deploy new task definition / trigger App Runner redeploy
 
 # 4. Verify
+
 curl https://rasayam.com/health/
+
 # {"status":"ok","checks":{"db":"ok","cache":"ok","s3":"ok"}}
+
 ```
 
 ---
@@ -117,8 +129,8 @@ Verification: HMAC-SHA256 on raw request body, compared with `X-Razorpay-Signatu
 
 ## Rollback
 
-| Scenario | Action |
+|Scenario|Action|
 |---|---|
-| Bad code deploy | Redeploy previous ECR image tag in ECS task definition |
-| Migration broke DB | `python manage.py migrate products 0012_...`; redeploy previous image |
-| Missing env var | Update ECS task definition env; force new deployment |
+|Bad code deploy|Redeploy previous ECR image tag in ECS task definition|
+|Migration broke DB|`python manage.py migrate products 0012_...`; redeploy previous image|
+|Missing env var|Update ECS task definition env; force new deployment|

@@ -1,10 +1,16 @@
+from django.db.models import Sum
 from .models import Cart
+from . import session_cart as guest_cart
 
 def cart_count(request):
     if request.user.is_authenticated:
-        # Get or create the cart for the user
-        cart, _ = Cart.objects.get_or_create(user=request.user)
-        # Count the total number of items (sum of quantities)
-        count = sum(item.quantity for item in cart.items.all())
+        cart = Cart.objects.filter(user=request.user).first()
+        if cart:
+            count = cart.items.aggregate(total=Sum('quantity'))['total'] or 0
+        else:
+            count = 0
         return {'cart_count': count}
-    return {'cart_count': 0}
+    else:
+        # Sum quantities from guest session cart
+        count = sum(item['quantity'] for item in guest_cart.get_items(request.session))
+        return {'cart_count': count}

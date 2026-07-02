@@ -31,7 +31,7 @@
 
 ## 3. Caching ✅ COMPLETE
 
-**Production**: Redis via `REDIS_URL` → ElastiCache (`django-redis==7.0.0`)  
+**Production**: Redis via `REDIS_URL` → ElastiCache (`django-redis==7.0.0`)
 **Development**: `LocMemCache` (automatic fallback)
 
 - `@cache_page(60*5)` on `index()`
@@ -75,12 +75,14 @@ Health check (`/health/`) probes the cache with a live set/get round-trip.
 ## 7. Static & Media File Pipeline ✅ COMPLETE
 
 **Production (S3 active)**:
+
 - `collectstatic` → `S3StaticStorage` → `rasayam-static-prod` S3 bucket, `static/` prefix
 - Media uploads → `S3MediaStorage` → `rasayam-media-prod` S3 bucket, `media/` prefix
 - `STATIC_URL` / `MEDIA_URL` resolve to S3/CloudFront domain automatically
 - WhiteNoise **not** injected into middleware when S3 static is active
 
 **Development / fallback (no S3 bucket set)**:
+
 - Static: WhiteNoise with `CompressedManifestStaticFilesStorage`
 - Media: local filesystem or Cloudinary
 
@@ -146,6 +148,7 @@ All return `{"cart_total": "...", "cart_count": N}` on mutation.
 `POST /webhooks/razorpay/` — CSRF-exempt (machine-to-machine; auth via HMAC).
 
 Flow:
+
 1. Read raw request body
 2. Compute `HMAC-SHA256(RAZORPAY_WEBHOOK_SECRET, body)`
 3. Compare with `X-Razorpay-Signature` header using `hmac.compare_digest` (timing-safe)
@@ -157,6 +160,7 @@ Flow:
 ## 13. Multi-Stage Docker Build ✅ COMPLETE
 
 Two-stage `Dockerfile`:
+
 - **builder** stage: installs `gcc` + `libpq-dev`, compiles all packages into `/install`
 - **runtime** stage: copies `/install`, installs `libpq5` only (no compiler), runs as non-root `app:app` user
 
@@ -204,7 +208,6 @@ AWS_STATIC_BUCKET_NAME=rasayam-static  # Enables S3 static
 RAZORPAY_WEBHOOK_SECRET=...            # Webhook HMAC key
 WEB_CONCURRENCY=5                      # Override CPU-scaled workers
 ```
-
 
 ---
 

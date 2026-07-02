@@ -23,17 +23,13 @@
     .customer-name { font-family: 'Playfair Display', serif; font-weight: 700; margin-top: 20px; }
     .verified { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #999; }
 </style>
-
-<section class="container text-center" style="margin-top: 80px;">
-    <h2 class="playfair" style="font-size: 3rem;">Customer Stories</h2>
-    <p class="subtitle" style="letter-spacing: 3px; text-transform: uppercase; font-size: 0.8rem; color: var(--gold);">Voices from the RASAYAM Community</p>
+<section class="container text-center" style="margin-top: 80px; margin-bottom: 40px;">
+    <h1 class="playfair" style="font-size: 3rem; margin-bottom: 12px;">Customer Stories</h1>
+    <p style="letter-spacing: 3px; text-transform: uppercase; font-size: 0.8rem; color: var(--gold);">Voices from the Rasayam Community</p>
 </section>
 
 <section class="reviews-section" style="padding: 80px 0;">
     <div class="container">
-        <h1 class="playfair" style="font-size: 3rem; text-align: center;">Customer Stories</h1>
-        <p style="text-align: center; color: var(--gold); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 60px;">Voices from the Rasayam Community</p>
-
         <div class="review-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px;">
             {% for review in reviews %}
                 <div class="review-card" style="border: 1px solid #eee; padding: 40px; position: relative;">
