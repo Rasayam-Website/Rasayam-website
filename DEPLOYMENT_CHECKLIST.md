@@ -7,7 +7,7 @@
 
 ## Pre-Flight: Code & Database
 
-- [x] `python manage.py check` → 0 issues
+- [x] `py manage.py check` → 0 issues
 - [x] Migration 0013 applied — OTPToken table ✅ COMPLETE
 - [x] Migration 0014 applied — Product.stock, Order.shipping_address, Order.transaction_id ✅ COMPLETE
 - [x] OTP login with 5-min expiry + 5-attempt lockout ✅ COMPLETE
@@ -60,7 +60,7 @@ Copy `.env.example` and fill every value before deploying.
 docker build -t rasayam-website .
 docker tag rasayam-website <ecr-uri>:latest
 docker push <ecr-uri>:latest
-python manage.py migrate --noinput
+py manage.py migrate --noinput
 
 # Deploy new ECS task revision / trigger App Runner redeploy
 
@@ -105,5 +105,5 @@ curl https://rasayam.com/health/
 | Scenario | Action |
 | --- | --- |
 | Bad code deploy | Redeploy previous ECR image tag in ECS |
-| Migration broke DB | `python manage.py migrate products 0012_...`; redeploy previous image |
+| Migration broke DB | `py manage.py migrate products 0012_...`; redeploy previous image |
 | Missing env var | Update ECS task definition env; force new deployment |

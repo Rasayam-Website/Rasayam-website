@@ -30,7 +30,7 @@
 
 *Root cause*: Two separate view functions (`privacy_policy` and `privacy`) both registered under `privacy-policy/` in `urls.py`.
 
-*Fix*: Deleted the duplicate view function. Single `privacy()` view, single URL entry. Verified with `python manage.py check`.
+*Fix*: Deleted the duplicate view function. Single `privacy()` view, single URL entry. Verified with `py manage.py check`.
 
 ---
 
@@ -369,7 +369,7 @@ None.
 
 #### **SEC-01 · Account Hijacking & Auth Bypass in Registration**
 
-* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L251-L273) (inside `register_view`)
+* **Location**: [products/views.py](./products/views.py#L251-L273) (inside `register_view`)
 * **Symptom/Vulnerability**: An attacker can hijack any account, including the administrator (`username='admin'`), by registering with their username.
 * **Root Cause**: The view utilizes `User.objects.get_or_create(username=username)` without verifying if the user already exists or has an established password/profile. It then retrieves or creates the `CustomerProfile`, overwrites the profile details (including the `phone_number` and `email`) with the attacker's registration input, and issues an OTP. Once verified, `login(request, profile.user)` is executed, logging the attacker into the hijacked account.
 * **Fix**: Validate that the username does not already exist before creating or retrieving a user during registration. Throw a validation error if the username is taken.
@@ -377,7 +377,7 @@ None.
 
 #### **SEC-02 · Authentication Denial of Service via Non-Unique Phone Numbers**
 
-* **Location**: [products/models.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/models.py#L7) (`CustomerProfile`) & [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L277-L330) (`login_view`, `verify_otp`, `resend_otp`)
+* **Location**: [products/models.py](./products/models.py#L7) (`CustomerProfile`) & [products/views.py](./products/views.py#L277-L330) (`login_view`, `verify_otp`, `resend_otp`)
 * **Symptom**: Logging in or requesting/verifying OTPs returns a `500 Server Error` (`MultipleObjectsReturned`) for certain phone numbers.
 * **Root Cause**: The `phone_number` field in the `CustomerProfile` model is not marked as `unique=True`, allowing multiple users to register with the same phone number. However, the login and OTP verification flows query the database using `.get(phone_number=phone)`.
 * **Fix**: Mark `phone_number` as unique in the model (e.g., `unique=True` or handle non-uniqueness gracefully in the query by filtering for the specific username).
@@ -385,7 +385,7 @@ None.
 
 #### **SEC-03 · Rate Limiting Bypass in OTP Resend**
 
-* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L332-L348) (inside `resend_otp`)
+* **Location**: [products/views.py](./products/views.py#L332-L348) (inside `resend_otp`)
 * **Symptom/Vulnerability**: Rate limiting on the OTP resend endpoint can be completely bypassed by sending GET requests.
 * **Root Cause**: The `@ratelimit` decorator is configured with `method='POST'`. However, `resend_otp` doesn't enforce that the request method is POST. It issues a new OTP and sends it for any HTTP method, including GET.
 * **Fix**: Enforce `POST` request method checking in the view using `@require_POST` or explicit checking:
@@ -397,7 +397,7 @@ None.
 
 #### **LOG-01 · Permanent Stock Exhaustion via Abandoned Checkouts**
 
-* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L377-L492) (inside `save_order`)
+* **Location**: [products/views.py](./products/views.py#L377-L492) (inside `save_order`)
 * **Symptom**: Inventory stock is depleted indefinitely, leading to artificial "Out of Stock" alerts for other customers.
 * **Root Cause**: Stock deduction happens when the user initiates a checkout (`save_order`) and is redirected to Razorpay. If the user abandons the payment session, the order remains in a `Pending` state, and the decremented stock is never returned to the inventory.
 * **Fix**: Implement a background cron job (or Celery task) to auto-cancel pending orders older than 15–30 minutes and restore their stock levels.
@@ -405,7 +405,7 @@ None.
 
 #### **LOG-02 · Fragile Stock Restoration on Gateway Creation Failure**
 
-* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L476-L485) (inside `save_order` exception block)
+* **Location**: [products/views.py](./products/views.py#L476-L485) (inside `save_order` exception block)
 * **Symptom**: Stock restoration fails or restores stock on the wrong items if Razorpay order creation fails.
 * **Root Cause**: The fallback code attempts to restore stock using a name query:
   `Product.objects.filter(name=item.product_name).update(stock=F('stock') + item.quantity)`
@@ -415,7 +415,7 @@ None.
 
 #### **LOG-03 · Incorrect OTP Validation Attempt Limit Check**
 
-* **Location**: [products/views.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/views.py#L304-L312) (inside `verify_otp`)
+* **Location**: [products/views.py](./products/views.py#L304-L312) (inside `verify_otp`)
 * **Symptom**: A user is only allowed 4 attempts instead of the intended 5, even if the 5th attempt is correct.
 * **Root Cause**: The attempt counter is incremented and validated *before* comparing the submitted OTP value. If `attempts` reaches `MAX_ATTEMPTS` (5), it triggers an immediate redirect/failure block without validating the submitted OTP code.
 * **Fix**: Perform the submitted OTP token check *before* validating the maximum attempt limit, or only increment the counter when the submitted token is incorrect.
@@ -427,7 +427,7 @@ None.
 
 #### **PERF-01 · N+1 Queries and DB Write on GET in `cart_count` Context Processor**
 
-* **Location**: [products/context_processors.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/context_processors.py)
+* **Location**: [products/context_processors.py](./products/context_processors.py)
 * **Symptom**: Suboptimal database performance on every page render for logged-in users.
 * **Root Cause**: The context processor runs on every request. It executes `Cart.objects.get_or_create(user=request.user)` which issues a DB write (INSERT) on safe GET requests if the cart does not exist. It then loops over and sums quantities, triggering additional query overhead.
 * **Fix**: Use database-level aggregation to count items and avoid creating a Cart object if one does not exist:
@@ -435,7 +435,7 @@ None.
 
 #### **PERF-02 · High Risk / Redundant Global Cache Middleware**
 
-* **Location**: [Rasayam_website/settings.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/Rasayam_website/settings.py#L99-L115) (`MIDDLEWARE`)
+* **Location**: [Rasayam_website/settings.py](./Rasayam_website/settings.py#L99-L115) (`MIDDLEWARE`)
 * **Symptom**: Risk of caching private data (like user profiles, orders, and carts) and exposing it across different user sessions.
 * **Root Cause**: `UpdateCacheMiddleware` and `FetchFromCacheMiddleware` are loaded globally. This will cache responses globally. While individual views like `index` and `about` are explicitly cached using `@cache_page`, global caching middleware is redundant and raises security concerns.
 * **Fix**: Remove the global cache middlewares from the `MIDDLEWARE` list and rely solely on view-level caching (`@cache_page`) and template fragment caching.
@@ -443,7 +443,7 @@ None.
 
 #### **ARCH-01 · Unreachable Guest Cart Logic (Dead Code)**
 
-* **Location**: [products/session_cart.py](file:///C:/Users/debab/OneDrive/Desktop/Rasayam-org-git-developer/Rasayam-website/products/session_cart.py)
+* **Location**: [products/session_cart.py](./products/session_cart.py)
 * **Symptom**: Guest cart operations are completely unreachable; guests cannot add items to the cart.
 * **Root Cause**: The codebase features a detailed session-based cart in `session_cart.py`. However, all views for adding to cart (`add_to_cart`, `add_to_cart_ajax`, etc.) require login (`@login_required`), rendering this feature dead code.
 * **Fix**: Remove `@login_required` from the cart views and integrate `session_cart.py` for guest users so they can shop before registering.

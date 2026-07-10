@@ -68,7 +68,7 @@ This certificate formally declares that the **Rasayam e-commerce platform** has 
 | Open critical bugs | **0** |
 | Open high-severity bugs | **0** |
 | Total resolved issues | **27** |
-| `python manage.py check` | **0 issues** |
+| `py manage.py check` | **0 issues** |
 | All packages pinned in `requirements.txt` | ✅ |
 | Migrations applied through `0014` | ✅ |
 

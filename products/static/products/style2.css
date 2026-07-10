@@ -1185,6 +1185,7 @@ select {
     font-family: inherit;
     border-radius: 0;
     -webkit-appearance: none;
+    appearance: none;
 }
 
 /* ---- MESSAGES TOAST ---- */
@@ -1295,6 +1296,7 @@ select {
     background: #fafafa;
     transition: border-color 0.25s ease, background 0.25s ease;
     -webkit-appearance: none;
+    appearance: none;
 }
 .auth-card .otp-input:focus {
     border-color: var(--gold);
