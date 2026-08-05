@@ -13,6 +13,9 @@ if [ "${RUN_MIGRATIONS_ON_STARTUP:-false}" = "true" ]; then
     python manage.py migrate --noinput
 fi
 
+# Automatically create default admin user if it doesn't exist
+python create_admin.py
+
 exec gunicorn Rasayam_website.wsgi:application \
     --bind "0.0.0.0:${PORT:-8000}" \
     --workers "$WORKERS" \
