@@ -70,7 +70,7 @@ This certificate formally declares that the **Rasayam e-commerce platform** has 
 | Total resolved issues | **27** |
 | `py manage.py check` | **0 issues** |
 | All packages pinned in `requirements.txt` | ✅ |
-| Migrations applied through `0014` | ✅ |
+| Migrations applied through `0016` | ✅ |
 
 ---
 

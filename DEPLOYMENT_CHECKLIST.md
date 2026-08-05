@@ -10,6 +10,8 @@
 - [x] `py manage.py check` → 0 issues
 - [x] Migration 0013 applied — OTPToken table ✅ COMPLETE
 - [x] Migration 0014 applied — Product.stock, Order.shipping_address, Order.transaction_id ✅ COMPLETE
+- [x] Migration 0015 applied — alter Order.transaction_id ✅ COMPLETE
+- [x] Migration 0016 applied — unique phone_number constraint on CustomerProfile ✅ COMPLETE
 - [x] OTP login with 5-min expiry + 5-attempt lockout ✅ COMPLETE
 - [x] Session-backed guest cart with merge-on-login ✅ COMPLETE
 - [x] Razorpay webhook receiver (HMAC-SHA256) ✅ COMPLETE
