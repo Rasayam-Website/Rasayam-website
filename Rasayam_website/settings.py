@@ -476,3 +476,6 @@ if not DEBUG and not RAZORPAY_KEY_ID:
 if not DEBUG and not RAZORPAY_KEY_SECRET:
     import warnings
     warnings.warn("WARNING: RAZORPAY_KEY_SECRET is not set. Payment processing will fail in production.", RuntimeWarning)
+
+# Zavu Integration
+ZAVU_API_KEY = os.getenv('ZAVU_API_KEY', '')
