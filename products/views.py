@@ -282,16 +282,15 @@ def product_detail_view_slug(request, slug):
 
 # --- 3. Authentication Views ---
 
-def _issue_otp(profile: CustomerProfile) -> OTPToken:
-    """Invalidate any live token and issue a fresh one."""
+def _issue_otp(profile: CustomerProfile) -> bool:
+    """Invalidate any live token and issue a fresh one. Returns True if OTP was sent successfully."""
     profile.otp_tokens.filter(is_used=False).update(is_used=True)
     token = OTPToken.objects.create(
         profile=profile,
         token=str(secrets.randbelow(900000) + 100000),  # cryptographically random 6-digit
         expires_at=timezone.now() + timezone.timedelta(minutes=OTPToken.EXPIRY_MINUTES),
     )
-    send_otp(profile.phone_number, token.token)
-    return token
+    return send_otp(profile.phone_number, token.token)
 
 
 @ratelimit(key='ip', rate='5/m', method='POST')
@@ -326,7 +325,10 @@ def register_view(request):
                 city=request.POST.get('city', ''),
             )
 
-        _issue_otp(profile)
+        success = _issue_otp(profile)
+        if not success:
+            messages.error(request, "Failed to send OTP. Please try again later.")
+            return redirect('register')
         return redirect('verify_otp', phone_number=phone)
 
     return render(request, 'products/register.html')
@@ -344,7 +346,10 @@ def login_view(request):
         except CustomerProfile.MultipleObjectsReturned:
             profile = CustomerProfile.objects.filter(phone_number=phone).first()
 
-        _issue_otp(profile)
+        success = _issue_otp(profile)
+        if not success:
+            messages.error(request, "Failed to send OTP. Please try again later.")
+            return redirect('login')
         return redirect('verify_otp', phone_number=phone)
 
     return render(request, 'products/login.html')
@@ -407,8 +412,11 @@ def resend_otp(request, phone_number):
             messages.error(request, f"Please wait {wait}s before requesting a new code.")
             return redirect('verify_otp', phone_number=phone_number)
 
-    _issue_otp(profile)
-    messages.success(request, "A new code has been sent.")
+    success = _issue_otp(profile)
+    if success:
+        messages.success(request, "A new code has been sent.")
+    else:
+        messages.error(request, "Failed to send OTP. Please try again later.")
     return redirect('verify_otp', phone_number=phone_number)
 
 
