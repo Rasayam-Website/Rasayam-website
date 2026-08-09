@@ -1,1 +1,1 @@
-web: sh entrypoint.sh
+web: python create_admin.py && gunicorn Rasayam_website.wsgi
