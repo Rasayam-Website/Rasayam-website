@@ -61,6 +61,19 @@ class BannerAdmin(ModelAdmin):
             return format_html('<img src="{}" style="width: 100px; height: 40px; object-fit: cover; border-radius: 4px;" />', obj.image.url)
         return "No Image"
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        self._clear_page_cache()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        self._clear_page_cache()
+
+    def _clear_page_cache(self):
+        """Clear the cached index page so new banners appear immediately."""
+        from django.core.cache import cache
+        cache.clear()
+
 @admin.register(PromoBox)
 class PromoBoxAdmin(ModelAdmin):
     list_display = ('title', 'subtitle', 'link_text', 'link_url', 'order')
