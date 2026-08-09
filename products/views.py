@@ -103,7 +103,7 @@ def get_razorpay_client():
 def index(request):
     banners = Banner.objects.filter(active=True).order_by('order')
     categories = Category.objects.all().order_by('order')
-    promos = PromoBox.objects.all().order_by('order')[:3]
+    promos = PromoBox.objects.all().order_by('order')[:4]
     # Use prefetch_related to optimize gallery_images loading
     items = Product.objects.all().prefetch_related('gallery_images').select_related('category')[:12]
     
@@ -134,7 +134,7 @@ def shop(request):
         items = paginator.page(paginator.num_pages)
     
     categories = Category.objects.all().order_by('order')
-    promos = PromoBox.objects.all().order_by('order')[:3]
+    promos = PromoBox.objects.all().order_by('order')[:4]
     
     cart_product_ids = []
     if request.user.is_authenticated:

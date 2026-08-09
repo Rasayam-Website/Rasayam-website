@@ -66,6 +66,19 @@ class PromoBoxAdmin(ModelAdmin):
     list_display = ('title', 'subtitle', 'link_text', 'link_url', 'order')
     list_editable = ('order', 'link_text', 'link_url')
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        self._clear_page_cache()
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        self._clear_page_cache()
+
+    def _clear_page_cache(self):
+        """Clear the cached index/shop pages so new promos appear immediately."""
+        from django.core.cache import cache
+        cache.clear()
+
 @admin.register(Category)
 class CategoryAdmin(ModelAdmin):
     list_display = ('name', 'order')
