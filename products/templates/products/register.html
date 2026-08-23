@@ -1,65 +1,270 @@
 {% extends 'products/base.html' %}
 
+{% block title %}Create Account — RASAYAM{% endblock %}
+
 {% block content %}
-<section class="auth-section" style="padding: 120px 0; background-color: #fdfaf5; min-height: 90vh; display: flex; align-items: center;">
-    <div class="container" style="max-width: 450px; background: #fff; padding: 50px; border-radius: 4px; box-shadow: 0 10px 40px rgba(0,0,0,0.03);">
-        
-        <div style="text-align: center; margin-bottom: 40px;">
-            <h2 style="font-family: 'Playfair Display', serif; font-size: 2rem; margin-bottom: 10px; color: #1a1a1a;">Customer Sign-In</h2>
-            <p style="font-size: 0.85rem; color: #888; letter-spacing: 1px;">JOIN THE WORLD OF RASAYAM</p>
+<style>
+    /* ── Auth Page Styles ─────────────────────────────────────────────────── */
+    .auth-section {
+        padding: 140px 20px 80px;
+        background: linear-gradient(165deg, #fdfaf5 0%, #f7f2ea 50%, #fdfaf5 100%);
+        min-height: 90vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .auth-card {
+        max-width: 460px;
+        width: 100%;
+        background: #fff;
+        padding: 52px 44px;
+        border-radius: 6px;
+        box-shadow: 0 8px 48px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+        animation: authFadeIn 0.6s ease-out both;
+    }
+    @keyframes authFadeIn {
+        from { opacity: 0; transform: translateY(18px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Header ────────────────────────────────────────────────────────── */
+    .auth-header { text-align: center; margin-bottom: 36px; }
+    .auth-header .eyebrow {
+        display: inline-block;
+        font-size: 0.65rem;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #c5a059;
+        border: 1px solid #c5a059;
+        padding: 5px 14px;
+        border-radius: 20px;
+        margin-bottom: 24px;
+    }
+    .auth-header h2 {
+        font-family: 'Playfair Display', serif;
+        font-size: 2rem;
+        color: #1a1a1a;
+        margin: 0 0 8px;
+        font-weight: 600;
+    }
+    .auth-header .subtitle {
+        font-size: 0.78rem;
+        color: #888;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+    }
+
+    /* ── Form Controls ─────────────────────────────────────────────────── */
+    .form-group {
+        margin-bottom: 22px;
+    }
+    .form-group label {
+        display: block;
+        font-size: 0.68rem;
+        letter-spacing: 1.8px;
+        text-transform: uppercase;
+        color: #777;
+        margin-bottom: 8px;
+        font-weight: 500;
+    }
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 14px 16px;
+        border: 1px solid #e5e5e5;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        font-family: inherit;
+        color: #1a1a1a;
+        background: #fff;
+        outline: none;
+        transition: border-color 0.3s, box-shadow 0.3s;
+        box-sizing: border-box;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+        border-color: #c5a059;
+        box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.08);
+    }
+    .form-group input::placeholder { color: #bbb; }
+
+    /* ── Phone Input with Prefix ───────────────────────────────────────── */
+    .phone-group {
+        display: flex;
+        border: 1px solid #e5e5e5;
+        border-radius: 4px;
+        overflow: hidden;
+        transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .phone-group:focus-within {
+        border-color: #c5a059;
+        box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.08);
+    }
+    .phone-prefix {
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        background: #fafafa;
+        font-size: 0.88rem;
+        color: #555;
+        font-weight: 500;
+        border-right: 1px solid #e5e5e5;
+        user-select: none;
+    }
+    .phone-group input {
+        flex: 1;
+        padding: 14px;
+        border: none;
+        outline: none;
+        font-size: 0.9rem;
+        font-family: inherit;
+        color: #1a1a1a;
+        box-shadow: none;
+    }
+
+    /* ── Two-Column Row ────────────────────────────────────────────────── */
+    .form-row {
+        display: flex;
+        gap: 18px;
+        margin-bottom: 22px;
+    }
+    .form-row .form-group {
+        flex: 1;
+        margin-bottom: 0;
+    }
+
+    /* ── Submit Button ──────────────────────────────────────────────────── */
+    .btn-auth {
+        width: 100%;
+        padding: 17px;
+        margin-top: 10px;
+        background: #1a1a1a;
+        color: #fff;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        letter-spacing: 3px;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        border-radius: 4px;
+        transition: background 0.3s, transform 0.15s;
+    }
+    .btn-auth:hover { background: #333; transform: translateY(-1px); }
+    .btn-auth:active { transform: translateY(0); }
+
+    /* ── Flash Messages ────────────────────────────────────────────────── */
+    .auth-flash {
+        padding: 12px 16px;
+        border-radius: 4px;
+        font-size: 0.82rem;
+        margin-bottom: 18px;
+        text-align: left;
+    }
+    .auth-flash.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+    .auth-flash.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+
+    /* ── Footer ────────────────────────────────────────────────────────── */
+    .auth-footer {
+        text-align: center;
+        margin-top: 28px;
+        font-size: 0.82rem;
+        color: #888;
+    }
+    .auth-footer a {
+        color: #c5a059;
+        text-decoration: none;
+        font-weight: 600;
+        transition: color 0.2s;
+    }
+    .auth-footer a:hover { color: #a88540; }
+    .auth-terms {
+        text-align: center;
+        margin-top: 20px;
+        font-size: 0.72rem;
+        color: #aaa;
+    }
+    .auth-terms a {
+        color: #888;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+    @media (max-width: 520px) {
+        .auth-card { padding: 40px 26px; }
+        .auth-header h2 { font-size: 1.7rem; }
+        .form-row { flex-direction: column; gap: 0; }
+        .form-row .form-group { margin-bottom: 22px; }
+    }
+</style>
+
+<section class="auth-section">
+    <div class="auth-card">
+        <div class="auth-header">
+            <span class="eyebrow">New Account</span>
+            <h2>Join Rasayam</h2>
+            <p class="subtitle">Create your account to get started</p>
         </div>
 
-        <form action="{% url 'register' %}" method="POST">
+        {% for message in messages %}
+            <div class="auth-flash {% if message.tags == 'error' %}error{% else %}success{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+
+        <form action="{% url 'register' %}" method="POST" autocomplete="off">
             {% csrf_token %}
-            
-            <div style="margin-bottom: 25px;">
-                <label style="font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase; color: #666; display: block; margin-bottom: 8px;">Full Name</label>
-                <input type="text" name="username" required 
-                       style="width: 100%; padding: 14px; border: 1px solid #e5e5e5; border-radius: 2px; font-size: 0.9rem; outline: none; transition: 0.3s;"
-                       onfocus="this.style.borderColor='#c5a059'">
-            </div>
-            
-            <div style="margin-bottom: 25px;">
-                <label style="font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase; color: #666; display: block; margin-bottom: 8px;">Phone Number</label>
-                <input type="text" name="phone" placeholder="+91" required 
-                       style="width: 100%; padding: 14px; border: 1px solid #e5e5e5; border-radius: 2px; font-size: 0.9rem; outline: none;"
-                       onfocus="this.style.borderColor='#c5a059'">
+
+            <div class="form-group">
+                <label for="reg-username">Full Name</label>
+                <input type="text" id="reg-username" name="username" placeholder="Your full name" required>
             </div>
 
-            <div style="margin-bottom: 25px;">
-                <label style="font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase; color: #666; display: block; margin-bottom: 8px;">Email Address</label>
-                <input type="email" name="email" placeholder="name@rasayamglobal.com" required 
-                       style="width: 100%; padding: 14px; border: 1px solid #e5e5e5; border-radius: 2px; font-size: 0.9rem; outline: none;"
-                       onfocus="this.style.borderColor='#c5a059'">
+            <div class="form-group">
+                <label for="reg-phone">Phone Number</label>
+                <div class="phone-group">
+                    <span class="phone-prefix">+91</span>
+                    <input
+                        type="tel"
+                        id="reg-phone"
+                        name="phone"
+                        placeholder="Enter phone number"
+                        inputmode="numeric"
+                        pattern="[\d\s\+]{10,15}"
+                        maxlength="15"
+                        required
+                    >
+                </div>
             </div>
 
-            <div style="display: flex; gap: 20px; margin-bottom: 35px;">
-                <div style="flex: 1;">
-                    <label style="font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase; color: #666; display: block; margin-bottom: 8px;">Gender</label>
-                    <select name="gender" style="width: 100%; padding: 14px; border: 1px solid #e5e5e5; border-radius: 2px; background: #fff; font-size: 0.9rem; outline: none;">
+            <div class="form-group">
+                <label for="reg-email">Email Address</label>
+                <input type="email" id="reg-email" name="email" placeholder="you@example.com" required>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="reg-gender">Gender</label>
+                    <select id="reg-gender" name="gender">
                         <option value="F">Female</option>
                         <option value="M">Male</option>
                         <option value="O">Other</option>
                     </select>
                 </div>
-                <div style="flex: 1;">
-                    <label style="font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase; color: #666; display: block; margin-bottom: 8px;">City</label>
-                    <input type="text" name="city" placeholder="e.g. Sambalpur" required 
-                           style="width: 100%; padding: 14px; border: 1px solid #e5e5e5; border-radius: 2px; font-size: 0.9rem; outline: none;"
-                           onfocus="this.style.borderColor='#c5a059'">
+                <div class="form-group">
+                    <label for="reg-city">City</label>
+                    <input type="text" id="reg-city" name="city" placeholder="e.g. Mumbai" required>
                 </div>
             </div>
 
-            <button type="submit" 
-                    style="width: 100%; padding: 18px; background: #1a1a1a; color: #fff; border: none; font-weight: 600; cursor: pointer; letter-spacing: 3px; font-size: 0.8rem; text-transform: uppercase; transition: 0.3s;"
-                    onmouseover="this.style.background='#333'" 
-                    onmouseout="this.style.background='#1a1a1a'">
-                SEND VERIFICATION CODE
-            </button>
+            <button type="submit" class="btn-auth">SEND VERIFICATION CODE</button>
         </form>
 
-        <p style="text-align: center; margin-top: 25px; font-size: 0.75rem; color: #999;">
-            By signing in, you agree to our <a href="#" style="color: #666; text-decoration: underline;">Terms & Privacy</a>
+        <p class="auth-footer">
+            Already have an account? <a href="{% url 'login' %}">Sign in</a>
+        </p>
+
+        <p class="auth-terms">
+            By creating an account, you agree to our <a href="{% url 'terms' %}">Terms &amp; Privacy Policy</a>
         </p>
     </div>
 </section>

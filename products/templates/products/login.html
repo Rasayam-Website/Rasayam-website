@@ -1,27 +1,196 @@
 {% extends 'products/base.html' %}
 
-{% block content %}
-<section style="padding: 150px 0; background: #fff; min-height: 80vh; display: flex; align-items: center;">
-    <div class="container" style="max-width: 400px; text-align: center;">
-        <h2 class="playfair" style="font-size: 2.5rem; margin-bottom: 10px;">Welcome Back</h2>
-        <p style="color: #999; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 40px;">
-            Enter your details to continue
-        </p>
+{% block title %}Sign In — RASAYAM{% endblock %}
 
-        <form method="POST">
-            {% csrf_token %}
-            <div style="margin-bottom: 25px;">
-                <input type="text" name="phone_number" placeholder="Phone Number" required 
-                       style="width: 100%; padding: 15px; border: 1px solid #eee; font-family: inherit; text-align: center;">
+{% block content %}
+<style>
+    /* ── Auth Page Styles ─────────────────────────────────────────────────── */
+    .auth-section {
+        padding: 140px 20px 80px;
+        background: linear-gradient(165deg, #fdfaf5 0%, #f7f2ea 50%, #fdfaf5 100%);
+        min-height: 90vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .auth-card {
+        max-width: 420px;
+        width: 100%;
+        background: #fff;
+        padding: 56px 44px;
+        border-radius: 6px;
+        box-shadow: 0 8px 48px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+        text-align: center;
+        animation: authFadeIn 0.6s ease-out both;
+    }
+    @keyframes authFadeIn {
+        from { opacity: 0; transform: translateY(18px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .auth-card .eyebrow {
+        display: inline-block;
+        font-size: 0.65rem;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #c5a059;
+        border: 1px solid #c5a059;
+        padding: 5px 14px;
+        border-radius: 20px;
+        margin-bottom: 28px;
+    }
+    .auth-card h2 {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.2rem;
+        color: #1a1a1a;
+        margin: 0 0 8px;
+        font-weight: 600;
+    }
+    .auth-card .subtitle {
+        font-size: 0.82rem;
+        color: #888;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        margin-bottom: 36px;
+    }
+    /* ── Phone Input Group ──────────────────────────────────────────────── */
+    .phone-group {
+        display: flex;
+        border: 1px solid #e5e5e5;
+        border-radius: 4px;
+        overflow: hidden;
+        transition: border-color 0.3s;
+        margin-bottom: 28px;
+    }
+    .phone-group:focus-within {
+        border-color: #c5a059;
+        box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.08);
+    }
+    .phone-prefix {
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        background: #fafafa;
+        font-size: 0.9rem;
+        color: #555;
+        font-weight: 500;
+        border-right: 1px solid #e5e5e5;
+        user-select: none;
+    }
+    .phone-group input {
+        flex: 1;
+        padding: 16px 14px;
+        border: none;
+        outline: none;
+        font-size: 0.95rem;
+        font-family: inherit;
+        letter-spacing: 1px;
+        color: #1a1a1a;
+    }
+    .phone-group input::placeholder { color: #bbb; }
+
+    /* ── Submit Button ──────────────────────────────────────────────────── */
+    .btn-auth {
+        width: 100%;
+        padding: 17px;
+        background: #1a1a1a;
+        color: #fff;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        letter-spacing: 3px;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        border-radius: 4px;
+        transition: background 0.3s, transform 0.15s;
+    }
+    .btn-auth:hover { background: #333; transform: translateY(-1px); }
+    .btn-auth:active { transform: translateY(0); }
+
+    /* ── Flash Messages ────────────────────────────────────────────────── */
+    .auth-flash {
+        padding: 12px 16px;
+        border-radius: 4px;
+        font-size: 0.82rem;
+        margin-bottom: 20px;
+        text-align: left;
+    }
+    .auth-flash.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+    .auth-flash.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+
+    /* ── Footer Link ───────────────────────────────────────────────────── */
+    .auth-footer {
+        margin-top: 32px;
+        font-size: 0.82rem;
+        color: #888;
+    }
+    .auth-footer a {
+        color: #c5a059;
+        text-decoration: none;
+        font-weight: 600;
+        transition: color 0.2s;
+    }
+    .auth-footer a:hover { color: #a88540; }
+
+    /* ── Divider ────────────────────────────────────────────────────────── */
+    .auth-divider {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin: 28px 0;
+        color: #ccc;
+        font-size: 0.7rem;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+    }
+    .auth-divider::before,
+    .auth-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: #e5e5e5;
+    }
+
+    @media (max-width: 480px) {
+        .auth-card { padding: 40px 28px; }
+        .auth-card h2 { font-size: 1.8rem; }
+    }
+</style>
+
+<section class="auth-section">
+    <div class="auth-card">
+        <span class="eyebrow">Secure Login</span>
+        <h2>Welcome Back</h2>
+        <p class="subtitle">Enter your phone to continue</p>
+
+        {% for message in messages %}
+            <div class="auth-flash {% if message.tags == 'error' %}error{% else %}success{% endif %}">
+                {{ message }}
             </div>
-            
-            <button type="submit" class="btn-gold" style="width: 100%; padding: 18px; letter-spacing: 2px;">
-                REQUEST OTP
-            </button>
+        {% endfor %}
+
+        <form method="POST" autocomplete="off">
+            {% csrf_token %}
+            <div class="phone-group">
+                <span class="phone-prefix">+91</span>
+                <input
+                    type="tel"
+                    name="phone_number"
+                    placeholder="Enter phone number"
+                    inputmode="numeric"
+                    pattern="[\d\s\+]{10,15}"
+                    maxlength="15"
+                    autocomplete="tel"
+                    autofocus
+                    required
+                >
+            </div>
+            <button type="submit" class="btn-auth">REQUEST OTP</button>
         </form>
 
-        <p style="margin-top: 30px; font-size: 0.85rem; color: #666;">
-            New to Rasayam? <a href="{% url 'register' %}" style="color: #c5a059; text-decoration: none; font-weight: 600;">Create an account</a>
+        <div class="auth-divider">or</div>
+
+        <p class="auth-footer">
+            New to Rasayam? <a href="{% url 'register' %}">Create an account</a>
         </p>
     </div>
 </section>

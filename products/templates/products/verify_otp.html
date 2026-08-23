@@ -3,51 +3,364 @@
 {% block title %}Verify Identity — RASAYAM{% endblock %}
 
 {% block content %}
-<div class="auth-screen">
+<style>
+    /* ── Auth Page Styles ─────────────────────────────────────────────────── */
+    .auth-section {
+        padding: 140px 20px 80px;
+        background: linear-gradient(165deg, #fdfaf5 0%, #f7f2ea 50%, #fdfaf5 100%);
+        min-height: 90vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .auth-card {
+        max-width: 440px;
+        width: 100%;
+        background: #fff;
+        padding: 56px 44px;
+        border-radius: 6px;
+        box-shadow: 0 8px 48px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+        text-align: center;
+        animation: authFadeIn 0.6s ease-out both;
+    }
+    @keyframes authFadeIn {
+        from { opacity: 0; transform: translateY(18px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .auth-card .eyebrow {
+        display: inline-block;
+        font-size: 0.65rem;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #c5a059;
+        border: 1px solid #c5a059;
+        padding: 5px 14px;
+        border-radius: 20px;
+        margin-bottom: 28px;
+    }
+    .auth-card h2 {
+        font-family: 'Playfair Display', serif;
+        font-size: 2rem;
+        color: #1a1a1a;
+        margin: 0 0 12px;
+        font-weight: 600;
+    }
+    .auth-card .subtitle {
+        font-size: 0.85rem;
+        color: #777;
+        line-height: 1.6;
+        margin-bottom: 32px;
+    }
+    .auth-card .subtitle strong {
+        color: #c5a059;
+        font-weight: 600;
+    }
+
+    /* ── OTP Digit Boxes ───────────────────────────────────────────────── */
+    .otp-digits {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-bottom: 28px;
+    }
+    .otp-digit {
+        width: 52px;
+        height: 60px;
+        border: 2px solid #e5e5e5;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: 600;
+        font-family: 'Playfair Display', serif;
+        color: #1a1a1a;
+        outline: none;
+        transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+        caret-color: #c5a059;
+    }
+    .otp-digit:focus {
+        border-color: #c5a059;
+        transform: scale(1.06);
+        box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.12);
+    }
+    .otp-digit.filled {
+        border-color: #c5a059;
+        background: #fdfaf5;
+    }
+    .otp-digit.success {
+        border-color: #15803d;
+        background: #f0fdf4;
+        animation: digitPop 0.3s ease-out;
+    }
+    @keyframes digitPop {
+        0%   { transform: scale(1); }
+        50%  { transform: scale(1.12); }
+        100% { transform: scale(1); }
+    }
+
+    /* ── Submit Button ──────────────────────────────────────────────────── */
+    .btn-auth {
+        width: 100%;
+        padding: 17px;
+        background: #1a1a1a;
+        color: #fff;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        letter-spacing: 3px;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        border-radius: 4px;
+        transition: background 0.3s, transform 0.15s;
+    }
+    .btn-auth:hover { background: #333; transform: translateY(-1px); }
+    .btn-auth:active { transform: translateY(0); }
+
+    /* ── Flash / Error Messages ────────────────────────────────────────── */
+    .auth-flash {
+        padding: 12px 16px;
+        border-radius: 4px;
+        font-size: 0.82rem;
+        margin-bottom: 18px;
+        text-align: left;
+    }
+    .auth-flash.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+    .auth-flash.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+
+    /* ── Resend Row ────────────────────────────────────────────────────── */
+    .resend-row {
+        margin-top: 32px;
+        font-size: 0.82rem;
+        color: #888;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .resend-btn {
+        background: none;
+        border: none;
+        color: #c5a059;
+        font-weight: 600;
+        font-size: 0.82rem;
+        cursor: pointer;
+        padding: 0;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        transition: color 0.2s;
+        font-family: inherit;
+    }
+    .resend-btn:hover { color: #a88540; }
+    .resend-btn:disabled {
+        color: #ccc;
+        cursor: not-allowed;
+        text-decoration: none;
+    }
+    .countdown {
+        display: inline-block;
+        min-width: 28px;
+        font-variant-numeric: tabular-nums;
+        color: #c5a059;
+        font-weight: 600;
+    }
+
+    /* ── Security Note ─────────────────────────────────────────────────── */
+    .security-note {
+        margin-top: 28px;
+        font-size: 0.72rem;
+        color: #aaa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+    .security-note svg {
+        width: 14px;
+        height: 14px;
+        fill: #ccc;
+        flex-shrink: 0;
+    }
+
+    @media (max-width: 480px) {
+        .auth-card { padding: 40px 24px; }
+        .auth-card h2 { font-size: 1.7rem; }
+        .otp-digit { width: 44px; height: 52px; font-size: 1.3rem; }
+        .otp-digits { gap: 7px; }
+    }
+</style>
+
+<section class="auth-section">
     <div class="auth-card">
         <span class="eyebrow">Secure Verification</span>
         <h2>Confirm Identity</h2>
         <p class="subtitle">
             A 6-digit code was sent to<br>
-            <strong style="color: var(--royal);">{{ phone }}</strong>
+            <strong>{{ phone }}</strong>
         </p>
 
         {% if error %}
-            <p class="error-msg">{{ error }}</p>
+            <div class="auth-flash error">{{ error }}</div>
         {% endif %}
 
         {% for message in messages %}
-            <p class="{% if message.tags == 'error' %}error-msg{% else %}success-msg{% endif %}">
+            <div class="auth-flash {% if message.tags == 'error' %}error{% else %}success{% endif %}">
                 {{ message }}
-            </p>
+            </div>
         {% endfor %}
 
-        <form method="POST" autocomplete="off">
+        <form method="POST" autocomplete="off" id="otpForm">
             {% csrf_token %}
-            <input
-                type="text"
-                name="otp"
-                class="otp-input"
-                placeholder="— — — — — —"
-                inputmode="numeric"
-                pattern="\d{6}"
-                maxlength="6"
-                autocomplete="one-time-code"
-                autofocus
-                required
-            >
-            <button type="submit" class="btn-cart" style="width: 100%; margin-top: 28px;">
-                VERIFY &amp; SIGN IN
-            </button>
+            <!-- Hidden input that collects the full 6-digit OTP for form submission -->
+            <input type="hidden" name="otp" id="otpHidden" value="">
+
+            <div class="otp-digits" id="otpDigits">
+                <input type="text" class="otp-digit" inputmode="numeric" maxlength="1" data-index="0" autocomplete="off" autofocus>
+                <input type="text" class="otp-digit" inputmode="numeric" maxlength="1" data-index="1" autocomplete="off">
+                <input type="text" class="otp-digit" inputmode="numeric" maxlength="1" data-index="2" autocomplete="off">
+                <input type="text" class="otp-digit" inputmode="numeric" maxlength="1" data-index="3" autocomplete="off">
+                <input type="text" class="otp-digit" inputmode="numeric" maxlength="1" data-index="4" autocomplete="off">
+                <input type="text" class="otp-digit" inputmode="numeric" maxlength="1" data-index="5" autocomplete="off">
+            </div>
+
+            <button type="submit" class="btn-auth" id="verifyBtn">VERIFY &amp; SIGN IN</button>
         </form>
 
         <div class="resend-row">
-            Didn't receive a code?&ensp;
-            <form method="POST" action="{% url 'resend_otp' phone %}" style="display: inline;">
+            <span id="resendText">Didn't receive a code?</span>
+            <form method="POST" action="{% url 'resend_otp' phone %}" style="display: inline;" id="resendForm">
                 {% csrf_token %}
-                <button type="submit" class="resend-btn">Resend code</button>
+                <button type="submit" class="resend-btn" id="resendBtn" disabled>
+                    Resend code <span class="countdown" id="countdown">(60s)</span>
+                </button>
             </form>
         </div>
+
+        <div class="security-note">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+            <span>Your code is encrypted and expires in 5 minutes</span>
+        </div>
     </div>
-</div>
+</section>
+
+<script>
+(function() {
+    'use strict';
+
+    const digits = document.querySelectorAll('.otp-digit');
+    const hiddenInput = document.getElementById('otpHidden');
+    const form = document.getElementById('otpForm');
+    const resendBtn = document.getElementById('resendBtn');
+    const countdownEl = document.getElementById('countdown');
+
+    // ── Collect all digit values into the hidden input ────────────────────
+    function collectOTP() {
+        let otp = '';
+        digits.forEach(d => { otp += d.value; });
+        hiddenInput.value = otp;
+        return otp;
+    }
+
+    // ── Handle digit input ───────────────────────────────────────────────
+    digits.forEach((digit, idx) => {
+        // Only allow numeric input
+        digit.addEventListener('input', function(e) {
+            const val = this.value.replace(/\D/g, '');
+            this.value = val.charAt(0) || '';
+
+            if (this.value) {
+                this.classList.add('filled');
+                // Auto-advance to next box
+                if (idx < 5) {
+                    digits[idx + 1].focus();
+                }
+            } else {
+                this.classList.remove('filled');
+            }
+
+            // Check if all 6 digits are filled → auto-submit
+            const otp = collectOTP();
+            if (otp.length === 6) {
+                // Brief success animation before submitting
+                digits.forEach((d, i) => {
+                    setTimeout(() => d.classList.add('success'), i * 60);
+                });
+                setTimeout(() => form.submit(), 450);
+            }
+        });
+
+        // ── Backspace: clear current and move to previous ────────────────
+        digit.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace') {
+                if (!this.value && idx > 0) {
+                    digits[idx - 1].focus();
+                    digits[idx - 1].value = '';
+                    digits[idx - 1].classList.remove('filled', 'success');
+                }
+                this.classList.remove('filled', 'success');
+            }
+            // Arrow key navigation
+            if (e.key === 'ArrowLeft' && idx > 0) {
+                e.preventDefault();
+                digits[idx - 1].focus();
+            }
+            if (e.key === 'ArrowRight' && idx < 5) {
+                e.preventDefault();
+                digits[idx + 1].focus();
+            }
+        });
+
+        // ── Paste support: distribute pasted code across all boxes ───────
+        digit.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const pasted = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+            if (pasted.length === 0) return;
+
+            pasted.split('').forEach((ch, i) => {
+                if (digits[i]) {
+                    digits[i].value = ch;
+                    digits[i].classList.add('filled');
+                }
+            });
+
+            // Focus the next empty box, or the last one
+            const nextEmpty = pasted.length < 6 ? pasted.length : 5;
+            digits[nextEmpty].focus();
+
+            const otp = collectOTP();
+            if (otp.length === 6) {
+                digits.forEach((d, i) => {
+                    setTimeout(() => d.classList.add('success'), i * 60);
+                });
+                setTimeout(() => form.submit(), 450);
+            }
+        });
+
+        // Select content on focus for easy overwrite
+        digit.addEventListener('focus', function() {
+            this.select();
+        });
+    });
+
+    // ── Ensure hidden input is populated on manual submit ────────────────
+    form.addEventListener('submit', function() {
+        collectOTP();
+    });
+
+    // ── Resend Countdown Timer ───────────────────────────────────────────
+    let remaining = 60;
+
+    function updateCountdown() {
+        if (remaining > 0) {
+            remaining--;
+            countdownEl.textContent = '(' + remaining + 's)';
+            setTimeout(updateCountdown, 1000);
+        } else {
+            countdownEl.textContent = '';
+            resendBtn.disabled = false;
+        }
+    }
+
+    updateCountdown();
+})();
+</script>
 {% endblock %}
