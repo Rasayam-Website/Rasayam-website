@@ -75,9 +75,9 @@ class CategoryAdmin(ModelAdmin):
 
 @admin.register(CustomerProfile)
 class CustomerProfileAdmin(ModelAdmin):
-    list_display = ('user', 'phone_number', 'city', 'is_verified')
+    list_display = ('user', 'email', 'city', 'is_verified')
     list_filter = ('is_verified', 'city')
-    search_fields = ('user__username', 'phone_number')
+    search_fields = ('user__username', 'email')
 
 @admin.register(OTPToken)
 class OTPTokenAdmin(ModelAdmin):

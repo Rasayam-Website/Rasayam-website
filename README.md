@@ -143,7 +143,7 @@ python test_environment.py
 
 ## ☁️ Production Architecture
 
-For production deployments (e.g., AWS, Render), the environment is configured to run with:
+For production deployments (e.g., AWS EC2, AWS ECS), the environment is configured to run with:
 1. **PostgreSQL** via Amazon RDS or similar managed hosting.
 2. **Redis** via Amazon ElastiCache for session caching and page caching.
 3. **AWS S3** (`static` and `media` buckets) to store static files and user uploads.

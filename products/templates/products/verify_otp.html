@@ -9,7 +9,7 @@
         <h2>Confirm Identity</h2>
         <p class="subtitle">
             A 6-digit code was sent to<br>
-            <strong style="color: var(--royal);">{{ phone }}</strong>
+            <strong style="color: var(--royal);">{{ email }}</strong>
         </p>
 
         {% if error %}
@@ -43,7 +43,7 @@
 
         <div class="resend-row">
             Didn't receive a code?&ensp;
-            <form method="POST" action="{% url 'resend_otp' phone %}" style="display: inline;">
+            <form method="POST" action="{% url 'resend_otp' email %}" style="display: inline;">
                 {% csrf_token %}
                 <button type="submit" class="resend-btn">Resend code</button>
             </form>

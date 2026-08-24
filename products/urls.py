@@ -47,8 +47,8 @@ urlpatterns = [
     # --- Authentication ---
     path('register/', views.register_view, name='register'),
     path('login/', views.login_view, name='login'),
-    path('verify/<str:phone_number>/', views.verify_otp, name='verify_otp'),
-    path('resend-otp/<str:phone_number>/', views.resend_otp, name='resend_otp'),
+    path('verify/<str:email>/', views.verify_otp, name='verify_otp'),
+    path('resend-otp/<str:email>/', views.resend_otp, name='resend_otp'),
     path('profile/', views.profile_view, name='profile'),
     path('logout/', auth_views.LogoutView.as_view(next_page='index'), name='logout'),
 

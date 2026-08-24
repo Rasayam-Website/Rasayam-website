@@ -1,43 +1,41 @@
 """
-OTP delivery gateway using Zavu API.
+OTP delivery gateway.
 """
 import logging
 from django.conf import settings
-from zavudev import Zavudev
+from django.core.mail import send_mail
 
 logger = logging.getLogger(__name__)
 
-def send_otp(phone: str, otp: str) -> bool:
+
+def send_otp(email: str, otp: str) -> bool:
     """
-    Deliver the OTP to the user via Zavu.
+    Deliver the OTP to the user via Email.
     Returns True if sent successfully, False otherwise.
     """
-    # Normalize phone to E.164 (assume +91 for 10-digit India numbers)
-    phone = phone.strip()
-    if len(phone) == 10 and phone.isdigit():
-        phone = f"+91{phone}"
-    elif not phone.startswith('+'):
-        phone = f"+{phone}"
+    logger.info("Sending OTP for %s via Email", email)
 
-    logger.info("Sending OTP for %s via Zavu", phone)
+    subject = "Your Rasayam Verification Code"
+    message = f"Your Rasayam verification code is: {otp}\n\nThis code is valid for 5 minutes."
+    from_email = settings.DEFAULT_FROM_EMAIL
 
     if settings.DEBUG:
-        logger.info("DEBUG mode enabled. Skipping real SMS.")
-        print(f"[OTP - DEBUG] {phone} -> {otp}")
-        return True
-    
-    if not settings.ZAVUDEV_API_KEY:
-        logger.error("ZAVUDEV_API_KEY is not set. Failing OTP send.")
-        return False
+        logger.info("DEBUG mode enabled. Printing OTP to console but STILL attempting send_mail if configured.")
+        print(f"[OTP - EMAIL DEBUG] {email} -> {otp}")
 
     try:
-        client = Zavudev(api_key=settings.ZAVUDEV_API_KEY)
-        client.messages.send(
-            to=phone,
-            text=f"Your Rasayam verification code is: {otp}. Valid for 10 minutes."
+        send_mail(
+            subject,
+            message,
+            from_email,
+            [email],
+            fail_silently=False,
         )
-        logger.info("OTP successfully sent to %s via Zavu", phone)
+        logger.info("OTP successfully sent to %s via Email", email)
         return True
     except Exception as e:
-        logger.error("Failed to send OTP to %s via Zavu: %s", phone, e)
+        logger.error("Failed to send OTP to %s via Email: %s", email, e)
+        # If in debug mode and email fails (e.g. no SMTP setup yet), just return True so flow works.
+        if settings.DEBUG:
+            return True
         return False
