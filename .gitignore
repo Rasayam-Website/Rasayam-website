@@ -1,15 +1,36 @@
+# Python
 __pycache__/
+*.py[cod]
 *.pyc
 
+# Database
 db.sqlite3
+
+# Media & collected static
 media/
 staticfiles/
 
+# Virtual environments
+.venv/
 venv/
 env/
 
+# IDE / Editor
 .vscode/
+.idea/
+.jetro/
+*.code-workspace
+.DS_Store
 
+# Environment
 .env
 
-staticfiles/
+# Testing / Coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+*.log
+
+# Linting config
+.markdownlint.json
+.pymarkdown
