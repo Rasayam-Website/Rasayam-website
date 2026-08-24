@@ -208,36 +208,35 @@ class RasayamCoreSystemTests(TestCase):
         existing_user.refresh_from_db()
         self.assertEqual(existing_user.email, "admin@rasayam.com")
 
-    def test_registration_duplicate_phone_prevention(self):
-        """Verify registering with an existing phone number returns an error."""
-        # Create an existing user and profile
+    def test_registration_duplicate_email_prevention(self):
+        """Verify registering with an existing email returns an error."""
         user = User.objects.create_user(username="user1", email="user1@rasayam.com")
-        CustomerProfile.objects.create(user=user, phone_number="9999999999", email="user1@rasayam.com")
-        
-        # Try to register another user with the same phone number
+        CustomerProfile.objects.create(user=user, email="user1@rasayam.com")
+
         response = self.client.post(reverse('register'), {
             'username': 'user2',
-            'phone': '9999999999',
-            'email': 'user2@rasayam.com',
+            'email': 'user1@rasayam.com',
             'gender': 'Female',
             'city': 'Punjab'
         })
-        
+
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "This phone number is already registered.")
+        self.assertContains(response, "This email is already registered.")
+
+
 
     def test_resend_otp_post_only(self):
         """Verify that resend_otp endpoint requires a POST request."""
         # Create a profile first
         user = User.objects.create_user(username="otp_user", email="otp@rasayam.com")
-        CustomerProfile.objects.create(user=user, phone_number="8888888888")
+        CustomerProfile.objects.create(user=user, email="otp@rasayam.com")
         
         # GET request should return 405 Method Not Allowed
-        response = self.client.get(reverse('resend_otp', args=["8888888888"]))
+        response = self.client.get(reverse('resend_otp', args=["otp@rasayam.com"]))
         self.assertEqual(response.status_code, 405)
         
         # POST request should succeed/redirect
-        response = self.client.post(reverse('resend_otp', args=["8888888888"]))
+        response = self.client.post(reverse('resend_otp', args=["otp@rasayam.com"]))
         self.assertEqual(response.status_code, 302)
 
     def test_cancel_expired_orders_command(self):

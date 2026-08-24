@@ -195,7 +195,7 @@
         <h2>Confirm Identity</h2>
         <p class="subtitle">
             A 6-digit code was sent to<br>
-            <strong>{{ phone }}</strong>
+            <strong>{{ email }}</strong>
         </p>
 
         {% if error %}
@@ -227,7 +227,7 @@
 
         <div class="resend-row">
             <span id="resendText">Didn't receive a code?</span>
-            <form method="POST" action="{% url 'resend_otp' phone %}" style="display: inline;" id="resendForm">
+            <form method="POST" action="{% url 'resend_otp' email %}" style="display: inline;" id="resendForm">
                 {% csrf_token %}
                 <button type="submit" class="resend-btn" id="resendBtn" disabled>
                     Resend code <span class="countdown" id="countdown">(60s)</span>

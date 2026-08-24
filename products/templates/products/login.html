@@ -52,41 +52,29 @@
         text-transform: uppercase;
         margin-bottom: 36px;
     }
-    /* ── Phone Input Group ──────────────────────────────────────────────── */
-    .phone-group {
-        display: flex;
-        border: 1px solid #e5e5e5;
-        border-radius: 4px;
-        overflow: hidden;
-        transition: border-color 0.3s;
+    /* ── Email Input ───────────────────────────────────────────────────── */
+    .email-group {
         margin-bottom: 28px;
     }
-    .phone-group:focus-within {
-        border-color: #c5a059;
-        box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.08);
-    }
-    .phone-prefix {
-        display: flex;
-        align-items: center;
-        padding: 0 14px;
-        background: #fafafa;
-        font-size: 0.9rem;
-        color: #555;
-        font-weight: 500;
-        border-right: 1px solid #e5e5e5;
-        user-select: none;
-    }
-    .phone-group input {
-        flex: 1;
+    .email-group input {
+        width: 100%;
         padding: 16px 14px;
-        border: none;
+        border: 1px solid #e5e5e5;
+        border-radius: 4px;
         outline: none;
         font-size: 0.95rem;
         font-family: inherit;
-        letter-spacing: 1px;
+        letter-spacing: 0.5px;
         color: #1a1a1a;
+        text-align: center;
+        transition: border-color 0.3s, box-shadow 0.3s;
+        box-sizing: border-box;
     }
-    .phone-group input::placeholder { color: #bbb; }
+    .email-group input:focus {
+        border-color: #c5a059;
+        box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.08);
+    }
+    .email-group input::placeholder { color: #bbb; }
 
     /* ── Submit Button ──────────────────────────────────────────────────── */
     .btn-auth {
@@ -160,7 +148,7 @@
     <div class="auth-card">
         <span class="eyebrow">Secure Login</span>
         <h2>Welcome Back</h2>
-        <p class="subtitle">Enter your phone to continue</p>
+        <p class="subtitle">Enter your email to continue</p>
 
         {% for message in messages %}
             <div class="auth-flash {% if message.tags == 'error' %}error{% else %}success{% endif %}">
@@ -170,16 +158,12 @@
 
         <form method="POST" autocomplete="off">
             {% csrf_token %}
-            <div class="phone-group">
-                <span class="phone-prefix">+91</span>
+            <div class="email-group">
                 <input
-                    type="tel"
-                    name="phone_number"
-                    placeholder="Enter phone number"
-                    inputmode="numeric"
-                    pattern="[\d\s\+]{10,15}"
-                    maxlength="15"
-                    autocomplete="tel"
+                    type="email"
+                    name="email"
+                    placeholder="Email Address"
+                    autocomplete="email"
                     autofocus
                     required
                 >

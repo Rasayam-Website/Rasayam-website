@@ -282,26 +282,24 @@ def product_detail_view_slug(request, slug):
 
 # --- 3. Authentication Views ---
 
-def _issue_otp(profile: CustomerProfile) -> OTPToken:
-    """Invalidate any live token and issue a fresh one."""
+def _issue_otp(profile: CustomerProfile) -> bool:
+    """Invalidate any live token and issue a fresh one. Returns True if OTP was sent successfully."""
     profile.otp_tokens.filter(is_used=False).update(is_used=True)
     token = OTPToken.objects.create(
         profile=profile,
         token=str(secrets.randbelow(900000) + 100000),  # cryptographically random 6-digit
         expires_at=timezone.now() + timezone.timedelta(minutes=OTPToken.EXPIRY_MINUTES),
     )
-    send_otp(profile.phone_number, token.token)
-    return token
+    return send_otp(profile.email, token.token)
 
 
 @ratelimit(key='ip', rate='5/m', method='POST')
 def register_view(request):
     if request.method == 'POST':
-        phone = request.POST.get('phone', '').strip()
         username = request.POST.get('username', '').strip()
         email = request.POST.get('email', '').strip()
 
-        if not phone or not username or not email:
+        if not username or not email:
             messages.error(request, "All fields are required.")
             return render(request, 'products/register.html')
 
@@ -309,8 +307,8 @@ def register_view(request):
             messages.error(request, "Username is already taken.")
             return render(request, 'products/register.html')
 
-        if CustomerProfile.objects.filter(phone_number=phone).exists():
-            messages.error(request, "This phone number is already registered.")
+        if CustomerProfile.objects.filter(email=email).exists():
+            messages.error(request, "This email is already registered.")
             return render(request, 'products/register.html')
 
         with transaction.atomic():
@@ -320,14 +318,16 @@ def register_view(request):
 
             profile = CustomerProfile.objects.create(
                 user=user,
-                phone_number=phone,
                 email=email,
                 gender=request.POST.get('gender', ''),
                 city=request.POST.get('city', ''),
             )
 
-        _issue_otp(profile)
-        return redirect('verify_otp', phone_number=phone)
+        success = _issue_otp(profile)
+        if not success:
+            messages.error(request, "Failed to send OTP. Please try again later.")
+            return redirect('register')
+        return redirect('verify_otp', email=email)
 
     return render(request, 'products/register.html')
 
@@ -335,24 +335,32 @@ def register_view(request):
 @ratelimit(key='ip', rate='5/m', method='POST')
 def login_view(request):
     if request.method == 'POST':
-        phone = request.POST.get('phone_number', '').strip()
+        email = request.POST.get('email', '').strip()
+
+        if not email:
+            messages.error(request, "Please enter a valid email address.")
+            return render(request, 'products/login.html')
+
         try:
-            profile = CustomerProfile.objects.get(phone_number=phone)
+            profile = CustomerProfile.objects.get(email=email)
         except CustomerProfile.DoesNotExist:
-            messages.error(request, "This phone number isn't registered yet.")
+            messages.error(request, "This email isn't registered yet.")
             return redirect('register')
         except CustomerProfile.MultipleObjectsReturned:
-            profile = CustomerProfile.objects.filter(phone_number=phone).first()
+            profile = CustomerProfile.objects.filter(email=email).first()
 
-        _issue_otp(profile)
-        return redirect('verify_otp', phone_number=phone)
+        success = _issue_otp(profile)
+        if not success:
+            messages.error(request, "Failed to send OTP. Please try again later.")
+            return redirect('login')
+        return redirect('verify_otp', email=email)
 
     return render(request, 'products/login.html')
 
 
 @ratelimit(key='ip', rate='10/m', method='POST')
-def verify_otp(request, phone_number):
-    profile = get_object_or_404(CustomerProfile, phone_number=phone_number.strip())
+def verify_otp(request, email):
+    profile = get_object_or_404(CustomerProfile, email=email.strip())
     otp_obj = profile.otp_tokens.filter(is_used=False).first()
 
     if request.method == 'POST':
@@ -386,18 +394,18 @@ def verify_otp(request, phone_number):
 
         remaining = OTPToken.MAX_ATTEMPTS - otp_obj.attempts
         return render(request, 'products/verify_otp.html', {
-            'phone': phone_number,
+            'email': email,
             'error': f"Incorrect code. {remaining} attempt{'s' if remaining != 1 else ''} remaining.",
         })
 
-    return render(request, 'products/verify_otp.html', {'phone': phone_number})
+    return render(request, 'products/verify_otp.html', {'email': email})
 
 
 @require_POST
 @ratelimit(key='ip', rate='3/m', method='POST')
-def resend_otp(request, phone_number):
+def resend_otp(request, email):
     """Issues a new OTP, subject to a per-token cooldown to prevent spamming."""
-    profile = get_object_or_404(CustomerProfile, phone_number=phone_number.strip())
+    profile = get_object_or_404(CustomerProfile, email=email.strip())
     latest = profile.otp_tokens.first()
 
     if latest:
@@ -405,11 +413,14 @@ def resend_otp(request, phone_number):
         if elapsed < OTPToken.RESEND_COOLDOWN_SECONDS:
             wait = int(OTPToken.RESEND_COOLDOWN_SECONDS - elapsed)
             messages.error(request, f"Please wait {wait}s before requesting a new code.")
-            return redirect('verify_otp', phone_number=phone_number)
+            return redirect('verify_otp', email=email)
 
-    _issue_otp(profile)
-    messages.success(request, "A new code has been sent.")
-    return redirect('verify_otp', phone_number=phone_number)
+    success = _issue_otp(profile)
+    if success:
+        messages.success(request, "A new code has been sent.")
+    else:
+        messages.error(request, "Failed to send OTP. Please try again later.")
+    return redirect('verify_otp', email=email)
 
 
 def logout_view(request):

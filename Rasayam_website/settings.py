@@ -47,16 +47,12 @@ if not SECRET_KEY:
 CONFIGURED_ALLOWED_HOSTS = env_list('ALLOWED_HOSTS')
 ALLOWED_HOSTS = CONFIGURED_ALLOWED_HOSTS or ['localhost', '127.0.0.1']
 
-RENDER_EXTERNAL_HOSTNAME = os.getenv('RENDER_EXTERNAL_HOSTNAME')
-if RENDER_EXTERNAL_HOSTNAME:
-    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
-
 AWS_APP_HOSTNAME = os.getenv('AWS_APP_HOSTNAME')
 if AWS_APP_HOSTNAME:
     ALLOWED_HOSTS.append(AWS_APP_HOSTNAME)
 
 ALLOWED_HOSTS = sorted(set(ALLOWED_HOSTS))
-if not DEBUG and STRICT_PRODUCTION_ENV and not CONFIGURED_ALLOWED_HOSTS and not RENDER_EXTERNAL_HOSTNAME and not AWS_APP_HOSTNAME:
+if not DEBUG and STRICT_PRODUCTION_ENV and not CONFIGURED_ALLOWED_HOSTS and not AWS_APP_HOSTNAME:
     raise ValueError('Production requires ALLOWED_HOSTS to include your domain or AWS load balancer hostname.')
 
 CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
@@ -139,7 +135,7 @@ WSGI_APPLICATION = 'Rasayam_website.wsgi.application'
 # ==========================================
 # DATABASE CONFIGURATION
 # ==========================================
-# Prefer a unified database URL for AWS RDS, Neon, Render, or other managed Postgres.
+# Prefer a unified database URL for AWS RDS, Neon, or other managed Postgres.
 if os.getenv('DATABASE_URL'):
     DATABASES = {
         'default': dj_database_url.config(
@@ -476,3 +472,19 @@ if not DEBUG and not RAZORPAY_KEY_ID:
 if not DEBUG and not RAZORPAY_KEY_SECRET:
     import warnings
     warnings.warn("WARNING: RAZORPAY_KEY_SECRET is not set. Payment processing will fail in production.", RuntimeWarning)
+
+# ==========================================
+# EMAIL CONFIGURATION
+# ==========================================
+# Defaults to console backend in development if SMTP is not provided
+if os.getenv('EMAIL_HOST'):
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = os.getenv('EMAIL_HOST')
+    EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+    EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', default=True)
+    EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+    EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+    DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Rasayam <no-reply@rasayam.com>')
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    DEFAULT_FROM_EMAIL = 'Rasayam Local <no-reply@localhost>'
