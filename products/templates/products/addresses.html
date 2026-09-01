@@ -1,0 +1,172 @@
+{% extends 'products/base.html' %}
+{% block title %}My Addresses | RASAYAM{% endblock %}
+
+{% block content %}
+<style>
+    .addresses-page {
+        --gold: #c5a059;
+        --royal: #1a1a1a;
+        --border: rgba(26,26,26,0.09);
+        background: #fdfaf5;
+        min-height: calc(100vh - 125px);
+        padding: 64px 0 88px;
+    }
+    .addresses-shell {
+        width: min(1120px, calc(100% - 40px));
+        margin: 0 auto;
+    }
+    .addresses-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 32px; flex-wrap: wrap; gap: 16px;
+    }
+    .addresses-title {
+        font-family: 'Playfair Display', serif; font-size: 2rem; color: var(--royal); margin: 0;
+    }
+    .back-link {
+        color: var(--gold); text-decoration: none; font-weight: 600; font-size: 0.82rem;
+        text-transform: uppercase; letter-spacing: 1px;
+    }
+    .addresses-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 24px; margin-bottom: 40px;
+    }
+    .address-card {
+        border: 1px solid var(--border); border-radius: 8px; padding: 24px;
+        background: #fff; display: flex; flex-direction: column; position: relative;
+    }
+    .address-card.is-default { border-color: var(--gold); box-shadow: 0 4px 15px rgba(197, 160, 89, 0.1); }
+    .badge { font-size: 0.6rem; font-weight: 700; letter-spacing: 1px; padding: 4px 8px; border-radius: 4px; text-transform: uppercase; }
+    .badge-default { background: var(--gold); color: #fff; }
+    .badge-type { background: #f0f0f0; color: #555; }
+    .address-name { font-size: 1.1rem; font-weight: 600; margin: 12px 0 8px; color: var(--royal); }
+    .address-text { font-size: 0.85rem; color: #555; line-height: 1.5; margin: 0 0 16px; }
+    .address-actions { display: flex; gap: 12px; margin-top: auto; border-top: 1px solid var(--border); padding-top: 16px; align-items: center;}
+    .action-link { font-size: 0.75rem; color: var(--royal); font-weight: 600; text-decoration: none; text-transform: uppercase; letter-spacing: 1px; border: none; background: none; cursor: pointer; padding: 0;}
+    .action-link:hover { color: var(--gold); }
+    .add-btn { width: 100%; border: 1px dashed #ccc; border-radius: 8px; padding: 32px; background: transparent; cursor: pointer; color: var(--gold); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s; }
+    .add-btn:hover { background: #fff; border-color: var(--gold); }
+    
+    .add-form-container { display: none; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 32px; margin-top: 24px; }
+    
+    /* form styles similar to register.html */
+    .form-group { margin-bottom: 22px; }
+    .form-group label { display: block; font-size: 0.66rem; letter-spacing: 1.8px; text-transform: uppercase; color: #999; margin-bottom: 8px; font-weight: 600; }
+    .form-group input, .form-group select { width: 100%; padding: 14px 16px; border: 1.5px solid #e8e8e8; border-radius: 6px; font-size: 0.9rem; font-family: inherit; box-sizing: border-box; }
+    .form-row { display: flex; gap: 16px; }
+    .form-row .form-group { flex: 1; }
+    .btn-auth { width: 100%; padding: 18px; background: var(--royal); color: #fff; border: none; font-weight: 600; cursor: pointer; letter-spacing: 3px; font-size: 0.76rem; text-transform: uppercase; border-radius: 6px; }
+    .btn-auth:hover { background: #3d3d3d; }
+    
+    @media (max-width: 600px) { .form-row { flex-direction: column; gap: 0; } }
+</style>
+
+<div class="addresses-page">
+    <div class="addresses-shell">
+        <div class="addresses-header">
+            <h1 class="addresses-title">Delivery Addresses</h1>
+            <a href="{% url 'profile' %}" class="back-link">← Back to Profile</a>
+        </div>
+
+        {% for message in messages %}
+            <div style="padding: 14px 18px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 20px; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0;">
+                {{ message }}
+            </div>
+        {% endfor %}
+
+        <div class="addresses-grid">
+            {% for addr in addresses %}
+            <div class="address-card {% if addr.is_default %}is-default{% endif %}">
+                <div style="display: flex; gap: 8px;">
+                    <span class="badge badge-type">{{ addr.get_address_type_display }}</span>
+                    {% if addr.is_default %}<span class="badge badge-default">DEFAULT</span>{% endif %}
+                </div>
+                <h3 class="address-name">{{ addr.full_name }}</h3>
+                <p class="address-text">
+                    {{ addr.address_line1 }}<br>
+                    {% if addr.address_line2 %}{{ addr.address_line2 }}<br>{% endif %}
+                    {% if addr.landmark %}Landmark: {{ addr.landmark }}<br>{% endif %}
+                    {{ addr.city }}, {{ addr.state }} - {{ addr.pincode }}<br>
+                    Phone: {{ addr.phone_number }}
+                </p>
+                <div class="address-actions">
+                    <a href="{% url 'address_edit' addr.id %}" class="action-link">Edit</a>
+                    <span style="color: #ccc;">|</span>
+                    <form action="{% url 'address_delete' addr.id %}" method="POST" style="margin: 0;" onsubmit="return confirm('Delete this address?');">
+                        {% csrf_token %}
+                        <button type="submit" class="action-link" style="color: #bb3e36;">Delete</button>
+                    </form>
+                    {% if not addr.is_default %}
+                    <span style="color: #ccc;">|</span>
+                    <form action="{% url 'address_set_default' addr.id %}" method="POST" style="margin: 0; margin-left: auto;">
+                        {% csrf_token %}
+                        <button type="submit" class="action-link">Make Default</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <button class="add-btn" onclick="document.getElementById('add-form').style.display='block'; this.style.display='none';">+ Add New Address</button>
+
+        <div class="add-form-container" id="add-form">
+            <h2 style="font-family: 'Playfair Display', serif; margin-top: 0;">Add New Address</h2>
+            <form action="{% url 'address_create' %}" method="POST">
+                {% csrf_token %}
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" name="full_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="tel" name="phone_number" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>PIN Code</label>
+                    <input type="text" name="pincode" maxlength="6" required>
+                </div>
+                <div class="form-group">
+                    <label>Flat / House No / Building</label>
+                    <input type="text" name="address_line1" required>
+                </div>
+                <div class="form-group">
+                    <label>Area / Street / Locality</label>
+                    <input type="text" name="address_line2" required>
+                </div>
+                <div class="form-group">
+                    <label>Landmark (Optional)</label>
+                    <input type="text" name="landmark">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" name="city" required>
+                    </div>
+                    <div class="form-group">
+                        <label>State</label>
+                        <input type="text" name="state" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Address Type</label>
+                        <select name="address_type">
+                            <option value="HOME">Home</option>
+                            <option value="WORK">Office / Work</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 25px;">
+                        <input type="checkbox" name="is_default" id="is_default" style="width: auto;">
+                        <label for="is_default" style="margin: 0; text-transform: none; font-size: 0.9rem; color: #1a1a1a;">Set as default address</label>
+                    </div>
+                </div>
+                <button type="submit" class="btn-auth">SAVE ADDRESS</button>
+                <button type="button" class="btn-auth" style="background: #f0f0f0; color: #333; margin-top: 10px;" onclick="document.getElementById('add-form').style.display='none'; document.querySelector('.add-btn').style.display='block';">CANCEL</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

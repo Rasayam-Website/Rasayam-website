@@ -1,0 +1,82 @@
+{% extends 'products/base.html' %}
+{% block title %}Edit Address | RASAYAM{% endblock %}
+
+{% block content %}
+<style>
+    .addresses-page { background: #fdfaf5; min-height: calc(100vh - 125px); padding: 64px 0 88px; }
+    .addresses-shell { width: min(800px, calc(100% - 40px)); margin: 0 auto; }
+    .form-container { background: #fff; border: 1px solid rgba(26,26,26,0.09); border-radius: 8px; padding: 32px; }
+    .form-group { margin-bottom: 22px; }
+    .form-group label { display: block; font-size: 0.66rem; letter-spacing: 1.8px; text-transform: uppercase; color: #999; margin-bottom: 8px; font-weight: 600; }
+    .form-group input, .form-group select { width: 100%; padding: 14px 16px; border: 1.5px solid #e8e8e8; border-radius: 6px; font-size: 0.9rem; font-family: inherit; box-sizing: border-box; }
+    .form-row { display: flex; gap: 16px; }
+    .form-row .form-group { flex: 1; }
+    .btn-auth { width: 100%; padding: 18px; background: #1a1a1a; color: #fff; border: none; font-weight: 600; cursor: pointer; letter-spacing: 3px; font-size: 0.76rem; text-transform: uppercase; border-radius: 6px; }
+    .btn-auth:hover { background: #3d3d3d; }
+    @media (max-width: 600px) { .form-row { flex-direction: column; gap: 0; } }
+</style>
+
+<div class="addresses-page">
+    <div class="addresses-shell">
+        <h1 style="font-family: 'Playfair Display', serif; color: #1a1a1a;">Edit Address</h1>
+        
+        <div class="form-container">
+            <form action="{% url 'address_edit' address.id %}" method="POST">
+                {% csrf_token %}
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" name="full_name" value="{{ address.full_name }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="tel" name="phone_number" value="{{ address.phone_number }}" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>PIN Code</label>
+                    <input type="text" name="pincode" maxlength="6" value="{{ address.pincode }}" required>
+                </div>
+                <div class="form-group">
+                    <label>Flat / House No / Building</label>
+                    <input type="text" name="address_line1" value="{{ address.address_line1 }}" required>
+                </div>
+                <div class="form-group">
+                    <label>Area / Street / Locality</label>
+                    <input type="text" name="address_line2" value="{{ address.address_line2 }}" required>
+                </div>
+                <div class="form-group">
+                    <label>Landmark (Optional)</label>
+                    <input type="text" name="landmark" value="{{ address.landmark }}">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" name="city" value="{{ address.city }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>State</label>
+                        <input type="text" name="state" value="{{ address.state }}" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Address Type</label>
+                        <select name="address_type">
+                            <option value="HOME" {% if address.address_type == 'HOME' %}selected{% endif %}>Home</option>
+                            <option value="WORK" {% if address.address_type == 'WORK' %}selected{% endif %}>Office / Work</option>
+                            <option value="OTHER" {% if address.address_type == 'OTHER' %}selected{% endif %}>Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: center; gap: 10px; margin-top: 25px;">
+                        <input type="checkbox" name="is_default" id="is_default" style="width: auto;" {% if address.is_default %}checked{% endif %}>
+                        <label for="is_default" style="margin: 0; text-transform: none; font-size: 0.9rem; color: #1a1a1a;">Set as default address</label>
+                    </div>
+                </div>
+                <button type="submit" class="btn-auth">SAVE CHANGES</button>
+                <a href="{% url 'address_list' %}" style="display: block; text-align: center; margin-top: 15px; text-decoration: none; font-size: 0.75rem; color: #999; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">CANCEL</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

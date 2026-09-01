@@ -36,6 +36,14 @@ urlpatterns = [
     path('add-to-wishlist/', views.add_to_wishlist, name='add_to_wishlist'),
     path('collections/', views.collections_view, name='collections'),
 
+    
+    # --- Addresses ---
+    path('account/addresses/', views.address_list, name='address_list'),
+    path('account/addresses/add/', views.address_create, name='address_create'),
+    path('account/addresses/<int:pk>/edit/', views.address_edit, name='address_edit'),
+    path('account/addresses/<int:pk>/delete/', views.address_delete, name='address_delete'),
+    path('account/addresses/<int:pk>/default/', views.address_set_default, name='address_set_default'),
+
     # --- Orders & Payments ---
     path('save-order/', views.save_order, name='save_order'),
     path('payment-verify/', views.payment_verify, name='payment_verify'),

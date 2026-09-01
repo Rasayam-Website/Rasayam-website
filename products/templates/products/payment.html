@@ -2,13 +2,49 @@
 {% load static %}
 
 {% block content %}
-<section class="container text-center" style="padding: 100px 0;">
-    <h2 class="playfair" style="font-size: 2rem;">Securing Your Selection</h2>
-    <p style="color: #888; margin-bottom: 30px;">Please do not refresh the page while we connect to the secure gateway.</p>
+<section class="container" style="padding: 60px 0;">
+    <div class="text-center" style="margin-bottom: 40px;">
+        <h2 class="playfair" style="font-size: 2rem;">Securing Your Selection</h2>
+        <p style="color: #888;">Please review your order before connecting to the secure gateway.</p>
+    </div>
+
+    <div style="max-width: 600px; margin: 0 auto 40px; background: #fafafa; padding: 30px; border: 1px solid var(--border); border-radius: 8px;">
+        <h3 class="playfair" style="font-size: 1.3rem; margin-bottom: 20px; text-align: center;">Order Summary</h3>
+        
+        {% for item in order.items.all %}
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 15px 0;">
+            <div style="display: flex; gap: 15px; align-items: center;">
+                {% if item.image_url %}
+                    <img src="{{ item.image_url }}" alt="{{ item.product_name }}" style="width: 50px; height: 65px; object-fit: cover;">
+                {% endif %}
+                <div>
+                    <h4 class="playfair" style="font-size: 1rem; margin: 0 0 5px;">{{ item.product_name }}</h4>
+                    {% if item.selected_size %}
+                        <p style="color: #888; font-size: 0.75rem; margin: 0;">Size: {{ item.selected_size }}</p>
+                    {% endif %}
+                    <p style="color: #888; font-size: 0.75rem; margin: 0;">Qty: {{ item.quantity }}</p>
+                </div>
+            </div>
+            <div style="text-align: right; font-weight: 600; color: var(--gold);">
+                ₹{{ item.price|stringformat:"d" }}
+            </div>
+        </div>
+        {% endfor %}
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 20px; margin-top: 10px;">
+            <span class="playfair" style="font-size: 1.2rem; font-weight: 600;">Total Amount</span>
+            <span class="playfair" style="font-size: 1.4rem; color: var(--royal); font-weight: 600;">₹{{ order.total_amount|stringformat:"d" }}</span>
+        </div>
+    </div>
     
-    <button id="rzp-button1" class="btn-gold" style="padding: 20px 60px; font-weight: 700;">
-        PAY ₹{{ order.total_amount }}
-    </button>
+    <div class="text-center">
+        <button id="rzp-button1" class="btn-gold" style="padding: 20px 60px; font-weight: 700; width: 100%; max-width: 400px; font-size: 1.1rem;">
+            PAY ₹{{ order.total_amount|stringformat:"d" }}
+        </button>
+        <p style="font-size: 0.75rem; color: #888; margin-top: 20px;">
+            <i class="fas fa-lock"></i> Secured by Razorpay — 256-bit encryption
+        </p>
+    </div>
 </section>
 
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
@@ -62,6 +98,13 @@ var options = {
 };
 
 var rzp1 = new Razorpay(options);
+
+rzp1.on('payment.failed', function (response){
+    // Show error message to user
+    alert("Payment failed: " + response.error.description);
+    // Redirect to fail page or handle otherwise
+    window.location.assign("{% url 'payment_fail' %}");
+});
 
 window.onload = function(){
     document.getElementById('rzp-button1').click();

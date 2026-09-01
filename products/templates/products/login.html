@@ -4,39 +4,142 @@
 
 {% block content %}
 <style>
-    /* ── Auth Page Styles ─────────────────────────────────────────────────── */
+    /* ── Auth Page Layout ─────────────────────────────────────────────────── */
     .auth-section {
-        padding: 140px 20px 80px;
-        background: linear-gradient(165deg, #fdfaf5 0%, #f7f2ea 50%, #fdfaf5 100%);
-        min-height: 90vh;
+        padding: 0;
+        min-height: 100vh;
+        display: flex;
+        background: #fdfaf5;
+    }
+
+    /* ── Left Panel — Brand Visual ────────────────────────────────────────── */
+    .auth-brand {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background:
+            linear-gradient(165deg, rgba(26, 26, 26, 0.92), rgba(26, 26, 26, 0.78)),
+            linear-gradient(135deg, #2c2420, #1a1a1a);
+        color: #fff;
+        padding: 60px 48px;
+        position: relative;
+        overflow: hidden;
+    }
+    .auth-brand::before {
+        content: '';
+        position: absolute;
+        top: -120px; right: -120px;
+        width: 400px; height: 400px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(197, 160, 89, 0.12), transparent 70%);
+        pointer-events: none;
+    }
+    .auth-brand::after {
+        content: '';
+        position: absolute;
+        bottom: -80px; left: -80px;
+        width: 300px; height: 300px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(197, 160, 89, 0.08), transparent 70%);
+        pointer-events: none;
+    }
+
+    .brand-content {
+        position: relative;
+        z-index: 1;
+        text-align: center;
+        max-width: 400px;
+    }
+    .brand-logo {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.8rem;
+        font-weight: 700;
+        letter-spacing: 8px;
+        margin-bottom: 20px;
+        color: #fff;
+    }
+    .brand-tagline {
+        font-size: 0.82rem;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #c5a059;
+        margin-bottom: 32px;
+        font-weight: 500;
+    }
+    .brand-divider {
+        width: 60px;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, #c5a059, transparent);
+        margin: 0 auto 32px;
+    }
+    .brand-quote {
+        font-family: 'Playfair Display', serif;
+        font-size: 1.15rem;
+        font-style: italic;
+        line-height: 1.8;
+        color: rgba(255, 255, 255, 0.7);
+        max-width: 340px;
+    }
+
+    .brand-features {
+        margin-top: 48px;
+        display: flex;
+        gap: 36px;
+        justify-content: center;
+    }
+    .brand-feature {
+        text-align: center;
+    }
+    .brand-feature-icon {
+        width: 40px; height: 40px;
+        display: flex; align-items: center; justify-content: center;
+        margin: 0 auto 10px;
+        border: 1px solid rgba(197, 160, 89, 0.3);
+        border-radius: 50%;
+    }
+    .brand-feature-icon svg { width: 18px; height: 18px; stroke: #c5a059; fill: none; stroke-width: 1.5; }
+    .brand-feature span {
+        display: block;
+        font-size: 0.62rem;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 500;
+    }
+
+    /* ── Right Panel — Login Form ─────────────────────────────────────────── */
+    .auth-form-panel {
+        flex: 1;
         display: flex;
         align-items: center;
         justify-content: center;
-    }
-    .auth-card {
-        max-width: 420px;
-        width: 100%;
+        padding: 60px 40px;
         background: #fff;
-        padding: 56px 44px;
-        border-radius: 6px;
-        box-shadow: 0 8px 48px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
-        text-align: center;
+    }
+
+    .auth-card {
+        max-width: 400px;
+        width: 100%;
         animation: authFadeIn 0.6s ease-out both;
     }
     @keyframes authFadeIn {
         from { opacity: 0; transform: translateY(18px); }
         to   { opacity: 1; transform: translateY(0); }
     }
+
     .auth-card .eyebrow {
         display: inline-block;
-        font-size: 0.65rem;
+        font-size: 0.62rem;
         letter-spacing: 3px;
         text-transform: uppercase;
         color: #c5a059;
-        border: 1px solid #c5a059;
-        padding: 5px 14px;
+        border: 1px solid rgba(197, 160, 89, 0.3);
+        padding: 6px 16px;
         border-radius: 20px;
         margin-bottom: 28px;
+        background: rgba(197, 160, 89, 0.04);
     }
     .auth-card h2 {
         font-family: 'Playfair Display', serif;
@@ -46,87 +149,124 @@
         font-weight: 600;
     }
     .auth-card .subtitle {
-        font-size: 0.82rem;
+        font-size: 0.88rem;
         color: #888;
-        letter-spacing: 1.5px;
+        line-height: 1.6;
+        margin-bottom: 40px;
+    }
+
+    /* ── Form Inputs ──────────────────────────────────────────────────────── */
+    .form-group {
+        margin-bottom: 24px;
+        position: relative;
+    }
+    .form-group label {
+        display: block;
+        font-size: 0.68rem;
+        letter-spacing: 1.8px;
         text-transform: uppercase;
-        margin-bottom: 36px;
+        color: #999;
+        margin-bottom: 8px;
+        font-weight: 600;
     }
-    /* ── Email Input ───────────────────────────────────────────────────── */
-    .email-group {
-        margin-bottom: 28px;
+    .form-group .input-wrapper {
+        position: relative;
     }
-    .email-group input {
+    .form-group .input-icon {
+        position: absolute;
+        left: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px; height: 18px;
+        color: #bbb;
+        pointer-events: none;
+        transition: color 0.3s;
+    }
+    .form-group input {
         width: 100%;
-        padding: 16px 14px;
-        border: 1px solid #e5e5e5;
-        border-radius: 4px;
+        padding: 16px 16px 16px 48px;
+        border: 1.5px solid #e8e8e8;
+        border-radius: 8px;
         outline: none;
         font-size: 0.95rem;
         font-family: inherit;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.3px;
         color: #1a1a1a;
-        text-align: center;
-        transition: border-color 0.3s, box-shadow 0.3s;
+        background: #fafafa;
+        transition: all 0.3s ease;
         box-sizing: border-box;
     }
-    .email-group input:focus {
+    .form-group input:focus {
         border-color: #c5a059;
-        box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.08);
+        background: #fff;
+        box-shadow: 0 0 0 4px rgba(197, 160, 89, 0.08);
     }
-    .email-group input::placeholder { color: #bbb; }
+    .form-group input:focus ~ .input-icon,
+    .form-group input:focus + .input-icon {
+        color: #c5a059;
+    }
+    .form-group input::placeholder { color: #bbb; }
 
     /* ── Submit Button ──────────────────────────────────────────────────── */
     .btn-auth {
         width: 100%;
-        padding: 17px;
-        background: #1a1a1a;
+        padding: 18px;
+        background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
         color: #fff;
         border: none;
         font-weight: 600;
         cursor: pointer;
         letter-spacing: 3px;
-        font-size: 0.78rem;
+        font-size: 0.76rem;
         text-transform: uppercase;
-        border-radius: 4px;
-        transition: background 0.3s, transform 0.15s;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
     }
-    .btn-auth:hover { background: #333; transform: translateY(-1px); }
+    .btn-auth::after {
+        content: '';
+        position: absolute;
+        top: 0; left: -100%;
+        width: 100%; height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(197, 160, 89, 0.15), transparent);
+        transition: left 0.5s ease;
+    }
+    .btn-auth:hover { background: linear-gradient(135deg, #2d2d2d, #3d3d3d); transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); }
+    .btn-auth:hover::after { left: 100%; }
     .btn-auth:active { transform: translateY(0); }
 
     /* ── Flash Messages ────────────────────────────────────────────────── */
     .auth-flash {
-        padding: 12px 16px;
-        border-radius: 4px;
+        padding: 14px 18px;
+        border-radius: 8px;
         font-size: 0.82rem;
-        margin-bottom: 20px;
-        text-align: left;
+        margin-bottom: 24px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        line-height: 1.5;
     }
-    .auth-flash.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-    .auth-flash.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+    .auth-flash.error {
+        background: #fef2f2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+    }
+    .auth-flash.success {
+        background: #f0fdf4;
+        color: #15803d;
+        border: 1px solid #bbf7d0;
+    }
+    .auth-flash svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
 
-    /* ── Footer Link ───────────────────────────────────────────────────── */
-    .auth-footer {
-        margin-top: 32px;
-        font-size: 0.82rem;
-        color: #888;
-    }
-    .auth-footer a {
-        color: #c5a059;
-        text-decoration: none;
-        font-weight: 600;
-        transition: color 0.2s;
-    }
-    .auth-footer a:hover { color: #a88540; }
-
-    /* ── Divider ────────────────────────────────────────────────────────── */
+    /* ── Divider & Footer ──────────────────────────────────────────────── */
     .auth-divider {
         display: flex;
         align-items: center;
         gap: 14px;
-        margin: 28px 0;
+        margin: 32px 0;
         color: #ccc;
-        font-size: 0.7rem;
+        font-size: 0.68rem;
         letter-spacing: 2px;
         text-transform: uppercase;
     }
@@ -135,47 +275,143 @@
         content: '';
         flex: 1;
         height: 1px;
-        background: #e5e5e5;
+        background: linear-gradient(90deg, #e5e5e5, transparent);
+    }
+    .auth-divider::after {
+        background: linear-gradient(90deg, transparent, #e5e5e5);
     }
 
+    .auth-footer {
+        text-align: center;
+        font-size: 0.85rem;
+        color: #888;
+    }
+    .auth-footer a {
+        color: #c5a059;
+        text-decoration: none;
+        font-weight: 600;
+        transition: color 0.2s;
+    }
+    .auth-footer a:hover { color: #a88540; text-decoration: underline; text-underline-offset: 3px; }
+
+    /* ── Security Badge ─────────────────────────────────────────────────── */
+    .security-badge {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin-top: 32px;
+        font-size: 0.7rem;
+        color: #bbb;
+        letter-spacing: 0.5px;
+    }
+    .security-badge svg { width: 14px; height: 14px; color: #ccc; }
+
+    /* ── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 860px) {
+        .auth-section { flex-direction: column; }
+        .auth-brand {
+            min-height: auto;
+            padding: 80px 30px 50px;
+        }
+        .brand-quote { display: none; }
+        .brand-features { display: none; }
+        .auth-form-panel { padding: 50px 28px 60px; }
+    }
     @media (max-width: 480px) {
-        .auth-card { padding: 40px 28px; }
         .auth-card h2 { font-size: 1.8rem; }
+        .brand-logo { font-size: 2rem; letter-spacing: 5px; }
     }
 </style>
 
 <section class="auth-section">
-    <div class="auth-card">
-        <span class="eyebrow">Secure Login</span>
-        <h2>Welcome Back</h2>
-        <p class="subtitle">Enter your email to continue</p>
+    <!-- Left Panel: Brand -->
+    <div class="auth-brand">
+        <div class="brand-content">
+            <div class="brand-logo">RASAYAM</div>
+            <p class="brand-tagline">Essence of Elegance</p>
+            <div class="brand-divider"></div>
+            <p class="brand-quote">
+                "Where ancient wisdom meets modern beauty — crafted for those who seek the extraordinary."
+            </p>
 
-        {% for message in messages %}
-            <div class="auth-flash {% if message.tags == 'error' %}error{% else %}success{% endif %}">
-                {{ message }}
+            <div class="brand-features">
+                <div class="brand-feature">
+                    <div class="brand-feature-icon">
+                        <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.84-8.84 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                    </div>
+                    <span>Curated</span>
+                </div>
+                <div class="brand-feature">
+                    <div class="brand-feature-icon">
+                        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    </div>
+                    <span>Secure</span>
+                </div>
+                <div class="brand-feature">
+                    <div class="brand-feature-icon">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    </div>
+                    <span>Fast</span>
+                </div>
             </div>
-        {% endfor %}
+        </div>
+    </div>
 
-        <form method="POST" autocomplete="off">
-            {% csrf_token %}
-            <div class="email-group">
-                <input
-                    type="email"
-                    name="email"
-                    placeholder="Email Address"
-                    autocomplete="email"
-                    autofocus
-                    required
-                >
+    <!-- Right Panel: Login Form -->
+    <div class="auth-form-panel">
+        <div class="auth-card">
+            <span class="eyebrow">Secure Login</span>
+            <h2>Welcome Back</h2>
+            <p class="subtitle">Enter your email and we'll send you a one-time verification code — no password needed.</p>
+
+            {% for message in messages %}
+                <div class="auth-flash {% if message.tags == 'error' %}error{% else %}success{% endif %}">
+                    {% if message.tags == 'error' %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    {% else %}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    {% endif %}
+                    {{ message }}
+                </div>
+            {% endfor %}
+
+            <form method="POST" autocomplete="off">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="login-email">Email Address</label>
+                    <div class="input-wrapper">
+                        <input
+                            type="email"
+                            id="login-email"
+                            name="email"
+                            placeholder="you@example.com"
+                            autocomplete="email"
+                            autofocus
+                            required
+                        >
+                        <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                            <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                    </div>
+                </div>
+                <button type="submit" class="btn-auth">SEND VERIFICATION CODE</button>
+            </form>
+
+            <div class="auth-divider">or</div>
+
+            <p class="auth-footer">
+                New to Rasayam? <a href="{% url 'register' %}">Create an account →</a>
+            </p>
+
+            <div class="security-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+                <span>256-bit encrypted • OTP verified • No password stored</span>
             </div>
-            <button type="submit" class="btn-auth">REQUEST OTP</button>
-        </form>
-
-        <div class="auth-divider">or</div>
-
-        <p class="auth-footer">
-            New to Rasayam? <a href="{% url 'register' %}">Create an account</a>
-        </p>
+        </div>
     </div>
 </section>
 {% endblock %}

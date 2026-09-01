@@ -24,7 +24,7 @@ from .models import (
     CustomerProfile, ContactInquiry, Order, OrderItem, Review,
     Cart, CartItem,
     Wishlist, WishlistItem,
-    OTPToken, Address
+    OTPToken,
 )
 from .otp_gateway import send_otp
 from . import session_cart as guest_cart
@@ -183,13 +183,11 @@ def contact(request):
     return render(request, 'products/contact.html')
 
 def cart(request):
-    addresses = []
     if request.user.is_authenticated:
         cart, created = Cart.objects.get_or_create(user=request.user)
         # Optimize query by using select_related and prefetch_related
         cart_items = cart.items.select_related('product').prefetch_related('product__gallery_images').all()
         total_price = sum(item.total_item_price for item in cart_items)
-        addresses = Address.objects.filter(user=request.user, is_active=True)
     else:
         session_items = guest_cart.get_items(request.session)
         product_ids = [item['product_id'] for item in session_items]
@@ -212,7 +210,6 @@ def cart(request):
         'cart_items': cart_items,
         'total_price': total_price,
         'recommended_items': recommended_items,
-        'addresses': addresses,
     }
     return render(request, 'products/cart.html', context)
 
@@ -534,7 +531,8 @@ def address_set_default(request, pk):
     messages.success(request, 'Default address updated.')
     return redirect(request.POST.get('next') or 'address_list')
 
-# --- 4. Order & Cart Processing (with Razorpay) ---
+# --- 4. Order & Cart Processing
+ (with Razorpay) ---
 
 @login_required
 @ratelimit(key='user', rate='10/h', method='POST')
@@ -634,21 +632,6 @@ def save_order(request):
 
     # ── Create Razorpay order (outside the DB transaction — network call) ─────
     amount_in_paise = int(order.total_amount * 100)
-    
-    if amount_in_paise < 100:
-        with transaction.atomic():
-            snapshot = order.original_cart_items or []
-            for entry in snapshot:
-                product_id = entry.get('product_id')
-                quantity = int(entry.get('quantity') or 0)
-                if product_id and quantity > 0:
-                    Product.objects.filter(pk=product_id).update(
-                        stock=F('stock') + quantity
-                    )
-        order.delete()
-        messages.error(request, "Order amount must be at least ₹1 (100 paise).")
-        return redirect('cart')
-
     try:
         razorpay_order = razorpay_client.order.create(data={
             "amount": amount_in_paise,
@@ -669,10 +652,8 @@ def save_order(request):
                         stock=F('stock') + quantity
                     )
         order.delete()
-        # Handle auth failures (return 401) or other Razorpay API errors (return 500)
-        status_code = 401 if "authentication" in str(e).lower() else 500
         messages.error(request, f"Payment gateway error: {e}")
-        return render(request, 'products/cart.html', {'error': str(e)}, status=status_code)
+        return redirect('cart')
 
     return render(request, 'products/payment.html', {
         'order': order,
@@ -729,17 +710,11 @@ def clear_paid_cart_items(cart, order):
 def payment_verify(request):
     """Verifies Razorpay Signature and finalizes transaction"""
     if request.method == "POST":
-        payment_id = request.POST.get('razorpay_payment_id')
-        razorpay_order_id = request.POST.get('razorpay_order_id')
-        signature = request.POST.get('razorpay_signature')
-        
-        if not all([payment_id, razorpay_order_id, signature]):
-            messages.warning(request, "Your payment could not be processed due to missing information. Your selection is still safe in your bag.")
-            return render(request, 'products/payment_fail.html', {
-                'title': 'Transaction Unsuccessful'
-            }, status=400)
-
         try:
+            payment_id = request.POST.get('razorpay_payment_id')
+            razorpay_order_id = request.POST.get('razorpay_order_id')
+            signature = request.POST.get('razorpay_signature')
+
             params_dict = {
                 'razorpay_order_id': razorpay_order_id,
                 'razorpay_payment_id': payment_id,
@@ -769,11 +744,9 @@ def payment_verify(request):
             # 4. FAILURE: Verification failed or signature was invalid
             print("Verification Error:", str(e))
             
-            # Return 400 for signature mismatch or other validation errors
-            messages.warning(request, "Your payment could not be verified. Your selection is still safe in your bag.")
-            return render(request, 'products/payment_fail.html', {
-                'title': 'Transaction Unsuccessful'
-            }, status=400)
+            # Note: Because 'save_order' no longer deletes the cart, 
+            # the user can come back here, and their items will still be there.
+            return redirect('payment_fail')
             
     return redirect('shop')
 

@@ -723,17 +723,9 @@
                 </div>
 
                 <div class="profile-detail">
-                    <span>Shipping Muse</span>
+                    <span>Delivery Addresses</span>
                     <strong>
-                        {% if user.customerprofile.city and user.customerprofile.state %}
-                            {{ user.customerprofile.city }}, {{ user.customerprofile.state }}
-                        {% elif user.customerprofile.city %}
-                            {{ user.customerprofile.city }}
-                        {% elif user.customerprofile.state %}
-                            {{ user.customerprofile.state }}
-                        {% else %}
-                            Not Provided
-                        {% endif %}
+                        <a href="{% url 'address_list' %}" style="color: #c5a059; text-decoration: none; font-weight: 600; font-size: 0.82rem;">Manage Addresses →</a>
                     </strong>
                 </div>
             </div>

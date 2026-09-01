@@ -7,7 +7,7 @@ from unfold.contrib.import_export.forms import ExportForm, ImportForm
 from .models import (
     CustomerProfile, Product, Banner, Category, 
     Order, OrderItem, Review, PromoBox, ContactInquiry,
-    Size, ProductImage, Wishlist, WishlistItem, Cart, OTPToken
+    Size, ProductImage, Wishlist, WishlistItem, Cart, OTPToken, Address
 )
 
 # --- 1. Product Inlines & Size Management ---
@@ -22,6 +22,13 @@ class ProductImageInline(TabularInline):
 class SizeAdmin(ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
+
+
+@admin.register(Address)
+class AddressAdmin(ModelAdmin):
+    list_display = ('full_name', 'user', 'city', 'state', 'pincode', 'address_type', 'is_default', 'is_active')
+    list_filter = ('address_type', 'is_default', 'state')
+    search_fields = ('full_name', 'phone_number', 'city', 'pincode', 'user__username')
 
 # --- 2. Product Management with Gallery & Sizes ---
 
