@@ -166,6 +166,17 @@ class OrderAdmin(ModelAdmin):
     
     inlines = [OrderItemInline]
     fixed_submit_bar = True
+    actions = ['download_packing_slip']
+
+    @admin.action(description="🖨️ Download Packing Slip")
+    def download_packing_slip(self, request, queryset):
+        if queryset.count() == 1:
+            order = queryset.first()
+            from django.shortcuts import redirect
+            return redirect('admin_packing_slip', order_id=order.id)
+        else:
+            self.message_user(request, "Please select only one order to download the slip at a time.", level='warning')
+
 
 
 # --- 6. Cart & Wishlist Management ---

@@ -71,4 +71,5 @@ urlpatterns = [
     # --- Delhivery Shipping Integration ---
     path('track/', views.track_order, name='track_order'),
     path('api/pincode-check/', views.pincode_check_api, name='pincode_check_api'),
+    path('admin/order/<int:order_id>/packing-slip/', views.admin_packing_slip, name='admin_packing_slip'),
 ]

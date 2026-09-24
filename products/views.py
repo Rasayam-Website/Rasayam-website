@@ -1227,3 +1227,29 @@ def search_view(request):
         'results': results,
         'paginator': paginator,
     })
+
+@login_required
+def admin_packing_slip(request, order_id):
+    """
+    Renders a printable packing slip for an admin.
+    """
+    if not request.user.is_staff:
+        return redirect('index')
+
+    order = get_object_or_404(Order, id=order_id)
+    if not order.delhivery_waybill:
+        messages.error(request, "This order does not have a Delhivery waybill assigned yet.")
+        return redirect('admin:products_order_change', order.id)
+
+    from .delhivery import get_packing_slip
+    slip_data = get_packing_slip(order.delhivery_waybill)
+    
+    package_info = None
+    if slip_data.get('packages_found', 0) > 0 and slip_data.get('packages'):
+        package_info = slip_data['packages'][0]
+    
+    return render(request, 'products/packing_slip.html', {
+        'order': order,
+        'package_info': package_info,
+        'error': slip_data.get('error')
+    })

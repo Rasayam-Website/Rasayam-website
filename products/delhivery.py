@@ -286,3 +286,21 @@ def create_shipment(order) -> dict:
         'error': result.get('rmk', 'Unknown error'),
         'raw': result,
     }
+
+# ── 4. Packing Slip ─────────────────────────────────────────────────────────
+
+def get_packing_slip(waybills: str) -> dict:
+    """Fetch packing slip data for one or multiple waybills (comma separated)."""
+    url = f'{DELHIVERY_BASE_URL}/api/p/packing_slip'
+    try:
+        resp = requests.get(
+            url,
+            headers=_headers(),
+            params={'wbns': waybills},
+            timeout=DELHIVERY_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as exc:
+        logger.error('Delhivery packing slip failed for %s: %s', waybills, exc)
+        return {'packages_found': 0, 'packages': [], 'error': str(exc)}
