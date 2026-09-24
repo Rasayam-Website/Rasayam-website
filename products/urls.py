@@ -67,4 +67,8 @@ urlpatterns = [
     path('shipping-policy/', views.shipping_policy, name='shipping_policy'),
     path('terms/', views.terms, name='terms'),
     path('faq/', views.faq, name='faq'),
+
+    # --- Delhivery Shipping Integration ---
+    path('track/', views.track_order, name='track_order'),
+    path('api/pincode-check/', views.pincode_check_api, name='pincode_check_api'),
 ]

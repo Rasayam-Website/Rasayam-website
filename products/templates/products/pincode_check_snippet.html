@@ -1,0 +1,86 @@
+<!-- Delhivery Pincode Serviceability Checker -->
+<div id="pincode-checker" style="margin-top: 25px; padding: 20px 0; border-top: 1px solid #f0f0f0;">
+    <label style="display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: #888; margin-bottom: 10px; font-weight: 600;">Check Delivery Availability</label>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <input 
+            type="text" 
+            id="pincode-input" 
+            placeholder="Enter PIN Code" 
+            maxlength="6" 
+            pattern="[0-9]{6}"
+            style="padding: 12px 16px; border: 1px solid #eee; font-size: 0.85rem; font-family: 'Poppins', sans-serif; outline: none; width: 180px; transition: border-color 0.3s;"
+            onfocus="this.style.borderColor='#c5a059'" 
+            onblur="this.style.borderColor='#eee'">
+        <button 
+            onclick="checkPincode()" 
+            id="pincode-btn"
+            style="padding: 12px 25px; background: #1a1a1a; color: #fff; border: none; font-size: 0.7rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; font-family: 'Poppins', sans-serif; transition: background 0.3s;"
+            onmouseover="this.style.background='#333'" 
+            onmouseout="this.style.background='#1a1a1a'">
+            Check
+        </button>
+    </div>
+    <div id="pincode-result" style="margin-top: 12px; font-size: 0.8rem;"></div>
+</div>
+
+<script>
+function checkPincode() {
+    const pincode = document.getElementById('pincode-input').value.trim();
+    const resultDiv = document.getElementById('pincode-result');
+    const btn = document.getElementById('pincode-btn');
+
+    if (!/^\d{6}$/.test(pincode)) {
+        resultDiv.innerHTML = '<span style="color: #c62828;">Please enter a valid 6-digit PIN code.</span>';
+        return;
+    }
+
+    btn.textContent = 'Checking...';
+    btn.disabled = true;
+    resultDiv.innerHTML = '';
+
+    fetch(`/api/pincode-check/?pincode=${pincode}`)
+        .then(res => res.json())
+        .then(data => {
+            btn.textContent = 'Check';
+            btn.disabled = false;
+
+            if (data.serviceable) {
+                let html = `
+                    <div style="padding: 15px; background: #f6fff6; border: 1px solid #c8e6c9; border-radius: 2px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            <span style="color: #2e7d32; font-weight: 600;">Delivery available to ${pincode}</span>
+                        </div>
+                        <div style="font-size: 0.75rem; color: #555; line-height: 1.6;">`;
+                if (data.city) html += `<span>📍 ${data.city}${data.state ? ', ' + data.state : ''}</span><br>`;
+                if (data.estimated_days) html += `<span>🚚 Estimated delivery: ${data.estimated_days} business days</span><br>`;
+                if (data.cod) html += `<span>💳 Cash on Delivery available</span><br>`;
+                html += `<span>✨ Free shipping on all orders</span>`;
+                html += `</div></div>`;
+                resultDiv.innerHTML = html;
+            } else {
+                resultDiv.innerHTML = `
+                    <div style="padding: 15px; background: #fff8e1; border: 1px solid #f0e6d2; border-radius: 2px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c5a059" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                            <span style="color: #c5a059; font-weight: 600;">Delivery may not be available to ${pincode}</span>
+                        </div>
+                        <p style="font-size: 0.75rem; color: #888; margin: 0;">Please contact our concierge at +91 8923061123 for alternative delivery options.</p>
+                    </div>`;
+            }
+        })
+        .catch(err => {
+            btn.textContent = 'Check';
+            btn.disabled = false;
+            resultDiv.innerHTML = '<span style="color: #c62828;">Unable to check availability. Please try again.</span>';
+        });
+}
+
+// Allow Enter key to trigger check
+document.getElementById('pincode-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        checkPincode();
+    }
+});
+</script>

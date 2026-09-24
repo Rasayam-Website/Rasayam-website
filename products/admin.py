@@ -144,11 +144,25 @@ class OrderItemInline(TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(ModelAdmin):
-    list_display = ('id', 'user', 'total_amount', 'is_paid', 'status', 'created_at')
+    list_display = ('id', 'user', 'total_amount', 'is_paid', 'status', 'delhivery_waybill', 'created_at')
     list_filter = ('is_paid', 'status', 'created_at')
     
     # Razorpay fields are locked to maintain transaction integrity
     readonly_fields = ('razorpay_order_id', 'razorpay_payment_id', 'razorpay_signature')
+    
+    fieldsets = (
+        (None, {
+            'fields': ('user', 'status', 'total_amount', 'is_paid', 'shipping_address'),
+        }),
+        ('Payment (Razorpay)', {
+            'fields': ('razorpay_order_id', 'razorpay_payment_id', 'razorpay_signature', 'transaction_id'),
+            'classes': ('collapse',),
+        }),
+        ('Shipping (Delhivery)', {
+            'fields': ('delhivery_waybill', 'delhivery_shipment_status'),
+            'description': 'Assign a Delhivery waybill number to enable shipment tracking for the customer.',
+        }),
+    )
     
     inlines = [OrderItemInline]
     fixed_submit_bar = True

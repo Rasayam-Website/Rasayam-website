@@ -1070,6 +1070,87 @@ def refund_policy(request): return render(request, 'products/refund_policy.html'
 def shipping(request): return render(request, 'products/shipping.html')
 def shipping_policy(request): return render(request, 'products/shipping_policy.html')
 def terms(request): return render(request, 'products/terms.html')
+
+
+# --- Delhivery Shipping Integration ---
+
+def track_order(request):
+    """
+    Public tracking page: accepts waybill number or order ID (e.g. RASAYAM-42).
+    """
+    query = request.GET.get('q', '').strip()
+    tracking = None
+    recent_orders = None
+
+    if query:
+        from .delhivery import track_shipment
+        import re
+
+        waybill = query
+
+        # If the query looks like an order ID (e.g. RASAYAM-42 or just a number),
+        # look up the associated waybill from the Order model.
+        order_id_match = re.match(r'^(?:RASAYAM-)?(\d+)$', query, re.IGNORECASE)
+        if order_id_match:
+            order_id = int(order_id_match.group(1))
+            try:
+                order_obj = Order.objects.get(id=order_id)
+                if order_obj.delhivery_waybill:
+                    waybill = order_obj.delhivery_waybill
+                else:
+                    # No waybill yet — show a pending message
+                    tracking = {
+                        'success': False,
+                        'error': f'Order #{order_id} has not been shipped yet. Please check back later.',
+                    }
+            except Order.DoesNotExist:
+                tracking = {
+                    'success': False,
+                    'error': f'Order #{order_id} was not found.',
+                }
+
+        if tracking is None:
+            tracking = track_shipment(waybill)
+
+    # Show recent orders for authenticated users
+    if request.user.is_authenticated:
+        recent_orders = request.user.orders.filter(
+            is_paid=True
+        ).order_by('-created_at')[:5]
+
+    return render(request, 'products/track_order.html', {
+        'query': query,
+        'tracking': tracking,
+        'recent_orders': recent_orders,
+    })
+
+
+def pincode_check_api(request):
+    """
+    GET /api/pincode-check/?pincode=110001
+    Returns JSON with pincode serviceability info from Delhivery.
+    """
+    pincode = request.GET.get('pincode', '').strip()
+
+    if not pincode or not pincode.isdigit() or len(pincode) != 6:
+        return JsonResponse({
+            'serviceable': False,
+            'error': 'Please provide a valid 6-digit PIN code.',
+        }, status=400)
+
+    from .delhivery import check_pincode_serviceability
+    result = check_pincode_serviceability(pincode)
+
+    # Return only the fields needed by the frontend (exclude raw API data)
+    return JsonResponse({
+        'serviceable': result.get('serviceable', False),
+        'city': result.get('city', ''),
+        'state': result.get('state', ''),
+        'district': result.get('district', ''),
+        'prepaid': result.get('prepaid', False),
+        'cod': result.get('cod', False),
+        'estimated_days': result.get('estimated_days', ''),
+    })
 def faq(request):
     return render(request, 'products/faq.html')
 

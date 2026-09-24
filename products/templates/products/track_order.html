@@ -1,0 +1,290 @@
+{% extends 'products/base.html' %}
+{% load static %}
+
+{% block title %}Track Your Order | RASAYAM{% endblock %}
+
+{% block content %}
+<style>
+    .tracking-page { background: #fcfaf8; min-height: 100vh; padding: 120px 0 80px; }
+    .tracking-container { max-width: 900px; margin: 0 auto; padding: 0 20px; }
+    .tracking-header { text-align: center; margin-bottom: 50px; }
+    .tracking-header h1 { font-family: 'Playfair Display', serif; font-size: 2.8rem; margin-bottom: 10px; color: #1a1a1a; }
+    .tracking-header p { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 3px; color: #999; }
+
+    /* Search Box */
+    .tracking-search-box {
+        background: #fff; border: 1px solid #eee; padding: 40px 50px;
+        margin-bottom: 40px; box-shadow: 0 15px 40px rgba(0,0,0,0.02);
+    }
+    .tracking-search-box label {
+        display: block; font-size: 0.7rem; text-transform: uppercase;
+        letter-spacing: 2px; color: #888; margin-bottom: 10px; font-weight: 600;
+    }
+    .tracking-input-row {
+        display: flex; gap: 15px;
+    }
+    .tracking-input-row input {
+        flex: 1; padding: 16px 20px; border: 1px solid #eee;
+        font-size: 0.9rem; font-family: 'Poppins', sans-serif;
+        outline: none; transition: border-color 0.3s;
+    }
+    .tracking-input-row input:focus { border-color: #c5a059; }
+    .tracking-input-row button {
+        padding: 16px 40px; background: #1a1a1a; color: #fff;
+        border: none; font-size: 0.75rem; font-weight: 700;
+        letter-spacing: 2px; text-transform: uppercase; cursor: pointer;
+        transition: background 0.3s; font-family: 'Poppins', sans-serif;
+    }
+    .tracking-input-row button:hover { background: #333; }
+
+    /* Tracking Result */
+    .tracking-result { background: #fff; border: 1px solid #eee; overflow: hidden; }
+    .tracking-result-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 30px 50px; border-bottom: 1px solid #f4f4f4;
+    }
+    .tracking-result-header .waybill-info h3 {
+        font-family: 'Playfair Display', serif; font-size: 1.4rem; margin-bottom: 5px;
+    }
+    .tracking-result-header .waybill-info p {
+        font-size: 0.75rem; color: #888; letter-spacing: 1px;
+    }
+    .tracking-status-badge {
+        display: inline-block; padding: 10px 25px;
+        font-size: 0.7rem; font-weight: 700; letter-spacing: 2px;
+        text-transform: uppercase;
+    }
+    .status-in-transit { background: #fff8e1; color: #c5a059; border: 1px solid #f0e6d2; }
+    .status-delivered { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+    .status-pending { background: #f3f3f3; color: #666; border: 1px solid #e0e0e0; }
+    .status-rto { background: #fce4ec; color: #c62828; border: 1px solid #f8bbd0; }
+
+    /* Route Info */
+    .tracking-route {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 30px 50px; background: #fdfaf5; border-bottom: 1px solid #f0e6d2;
+    }
+    .route-point { text-align: center; }
+    .route-point .label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 2px; color: #999; margin-bottom: 5px; }
+    .route-point .value { font-size: 1rem; font-weight: 600; color: #1a1a1a; }
+    .route-arrow {
+        color: #c5a059; font-size: 1.5rem; flex: 1; text-align: center;
+    }
+    .route-eta { text-align: center; }
+    .route-eta .label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 2px; color: #999; margin-bottom: 5px; }
+    .route-eta .value { font-size: 1rem; font-weight: 600; color: #c5a059; }
+
+    /* Timeline */
+    .tracking-timeline { padding: 40px 50px; }
+    .tracking-timeline h4 {
+        font-family: 'Playfair Display', serif; font-size: 1.2rem;
+        margin-bottom: 30px; color: #1a1a1a;
+    }
+    .timeline-item {
+        display: flex; gap: 20px; position: relative;
+        padding-bottom: 30px;
+    }
+    .timeline-item:last-child { padding-bottom: 0; }
+    .timeline-dot-col {
+        display: flex; flex-direction: column; align-items: center;
+        width: 20px; flex-shrink: 0;
+    }
+    .timeline-dot {
+        width: 12px; height: 12px; border-radius: 50%;
+        background: #e0e0e0; border: 2px solid #e0e0e0;
+        z-index: 2; flex-shrink: 0;
+    }
+    .timeline-dot.active {
+        background: #c5a059; border-color: #c5a059;
+    }
+    .timeline-line {
+        width: 2px; flex: 1; background: #f0f0f0;
+    }
+    .timeline-item:last-child .timeline-line { display: none; }
+    .timeline-content {
+        flex: 1; padding-top: 0;
+    }
+    .timeline-content .activity {
+        font-size: 0.85rem; color: #1a1a1a; font-weight: 500;
+        margin-bottom: 4px;
+    }
+    .timeline-content .location {
+        font-size: 0.75rem; color: #888;
+    }
+    .timeline-content .time {
+        font-size: 0.7rem; color: #bbb; margin-top: 2px;
+    }
+
+    /* Error */
+    .tracking-error {
+        background: #fff; border: 1px solid #eee; padding: 50px;
+        text-align: center;
+    }
+    .tracking-error .icon { font-size: 3rem; margin-bottom: 20px; color: #ddd; }
+    .tracking-error h3 {
+        font-family: 'Playfair Display', serif; font-size: 1.5rem;
+        margin-bottom: 10px;
+    }
+    .tracking-error p { font-size: 0.85rem; color: #888; }
+
+    /* No result */
+    .tracking-empty {
+        background: #fff; border: 1px solid #eee; padding: 60px;
+        text-align: center;
+    }
+    .tracking-empty .icon {
+        width: 80px; height: 80px; background: #fdfaf5; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        margin: 0 auto 25px; border: 1px solid #f0e6d2;
+    }
+    .tracking-empty h3 {
+        font-family: 'Playfair Display', serif; font-size: 1.5rem;
+        margin-bottom: 10px;
+    }
+    .tracking-empty p { font-size: 0.85rem; color: #888; max-width: 400px; margin: 0 auto; }
+
+    @media (max-width: 768px) {
+        .tracking-header h1 { font-size: 2rem; }
+        .tracking-search-box { padding: 25px 20px; }
+        .tracking-input-row { flex-direction: column; }
+        .tracking-input-row button { width: 100%; }
+        .tracking-result-header { flex-direction: column; gap: 15px; padding: 25px 20px; align-items: flex-start; }
+        .tracking-route { flex-direction: column; gap: 15px; padding: 25px 20px; }
+        .tracking-timeline { padding: 25px 20px; }
+    }
+</style>
+
+<div class="tracking-page">
+    <div class="tracking-container">
+
+        <div class="tracking-header">
+            <h1>Track Your Order</h1>
+            <p>Follow your garment's journey from our atelier</p>
+        </div>
+
+        <!-- Search Box -->
+        <div class="tracking-search-box">
+            <label>Enter Waybill Number or Order ID</label>
+            <form method="GET" action="{% url 'track_order' %}" class="tracking-input-row">
+                <input type="text" name="q" placeholder="e.g. 1234567890123 or RASAYAM-42" value="{{ query|default:'' }}" required>
+                <button type="submit">Track</button>
+            </form>
+        </div>
+
+        {% if tracking %}
+            {% if tracking.success %}
+            <!-- Tracking Result -->
+            <div class="tracking-result">
+                <div class="tracking-result-header">
+                    <div class="waybill-info">
+                        <h3>Waybill: {{ tracking.waybill }}</h3>
+                        <p>{% if tracking.ref_id %}Order Ref: {{ tracking.ref_id }}{% endif %}</p>
+                    </div>
+                    <span class="tracking-status-badge
+                        {% if 'deliver' in tracking.status|lower %}status-delivered
+                        {% elif 'transit' in tracking.status|lower or 'dispatch' in tracking.status|lower %}status-in-transit
+                        {% elif 'rto' in tracking.status|lower or 'return' in tracking.status|lower %}status-rto
+                        {% else %}status-pending{% endif %}">
+                        {{ tracking.status }}
+                    </span>
+                </div>
+
+                <!-- Route -->
+                <div class="tracking-route">
+                    <div class="route-point">
+                        <div class="label">Origin</div>
+                        <div class="value">{{ tracking.origin|default:"RASAYAM Atelier" }}</div>
+                    </div>
+                    <div class="route-arrow">→</div>
+                    <div class="route-point">
+                        <div class="label">Destination</div>
+                        <div class="value">{{ tracking.destination|default:"—" }}</div>
+                    </div>
+                    {% if tracking.estimated_delivery %}
+                    <div class="route-eta">
+                        <div class="label">Expected Delivery</div>
+                        <div class="value">{{ tracking.estimated_delivery }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Timeline -->
+                {% if tracking.scans %}
+                <div class="tracking-timeline">
+                    <h4>Shipment Journey</h4>
+                    {% for scan in tracking.scans %}
+                    <div class="timeline-item">
+                        <div class="timeline-dot-col">
+                            <div class="timeline-dot {% if forloop.first %}active{% endif %}"></div>
+                            <div class="timeline-line"></div>
+                        </div>
+                        <div class="timeline-content">
+                            <div class="activity">{{ scan.activity|default:scan.status }}</div>
+                            <div class="location">{{ scan.location }}</div>
+                            <div class="time">{{ scan.timestamp }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <!-- Error -->
+            <div class="tracking-error">
+                <div class="icon">📦</div>
+                <h3>Shipment Not Found</h3>
+                <p>{{ tracking.error|default:"We couldn't find a shipment matching your query. Please double-check your waybill number or order ID." }}</p>
+            </div>
+            {% endif %}
+
+        {% elif query %}
+            <div class="tracking-error">
+                <div class="icon">📦</div>
+                <h3>Shipment Not Found</h3>
+                <p>No tracking data found for "{{ query }}". Please verify the waybill or order ID and try again.</p>
+            </div>
+
+        {% else %}
+            <!-- Empty State -->
+            <div class="tracking-empty">
+                <div class="icon">
+                    <svg width="35" height="35" viewBox="0 0 24 24" fill="none" stroke="#c5a059" stroke-width="1.5">
+                        <rect x="1" y="3" width="15" height="13" rx="1"></rect>
+                        <polygon points="16 8 20 10 20 16 16 16"></polygon>
+                        <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                        <circle cx="18.5" cy="18.5" r="2.5"></circle>
+                    </svg>
+                </div>
+                <h3>Enter Your Tracking Details</h3>
+                <p>Use your Delhivery waybill number or Rasayam order ID to follow your garment's journey in real-time.</p>
+            </div>
+        {% endif %}
+
+        {% if user.is_authenticated %}
+        <!-- Recent Orders -->
+        {% if recent_orders %}
+        <div style="margin-top: 40px;">
+            <h4 class="playfair" style="font-size: 1.2rem; margin-bottom: 20px;">Your Recent Orders</h4>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                {% for order in recent_orders %}
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #fff; border: 1px solid #eee; padding: 20px 30px; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <span style="font-weight: 600;">Order #{{ order.id }}</span>
+                        <span style="color: #888; font-size: 0.8rem; margin-left: 15px;">{{ order.created_at|date:"M d, Y" }}</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: {% if order.status == 'Delivered' %}#2e7d32{% elif order.status == 'Shipped' %}#c5a059{% else %}#888{% endif %}; font-weight: 700;">{{ order.status }}</span>
+                        {% if order.delhivery_waybill %}
+                        <a href="{% url 'track_order' %}?q={{ order.delhivery_waybill }}" style="padding: 8px 20px; background: #1a1a1a; color: #fff; text-decoration: none; font-size: 0.7rem; letter-spacing: 1px; font-weight: 600;">TRACK</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

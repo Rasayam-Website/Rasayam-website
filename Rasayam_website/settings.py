@@ -337,6 +337,10 @@ RAZORPAY_KEY_ID = os.getenv('RAZORPAY_KEY_ID')
 RAZORPAY_KEY_SECRET = os.getenv('RAZORPAY_KEY_SECRET')
 RAZORPAY_WEBHOOK_SECRET = os.getenv('RAZORPAY_WEBHOOK_SECRET')
 
+# Delhivery Shipping API
+DELHIVERY_API_TOKEN = os.getenv('DELHIVERY_API_TOKEN', '')
+DELHIVERY_BASE_URL = os.getenv('DELHIVERY_BASE_URL', 'https://track.delhivery.com')
+
 LOGIN_URL = 'login'
 
 # Unfold Admin Configuration

@@ -224,6 +224,12 @@ class Order(models.Model):
     razorpay_signature = models.CharField(max_length=255, blank=True, null=True)
     is_paid = models.BooleanField(default=False)
 
+    # --- DELHIVERY SHIPPING FIELDS ---
+    delhivery_waybill = models.CharField('Delhivery Waybill', max_length=100, blank=True, null=True,
+                                         help_text='Waybill number assigned by Delhivery')
+    delhivery_shipment_status = models.CharField('Shipment Status', max_length=100, blank=True, default='',
+                                                  help_text='Last known Delhivery tracking status')
+
     def __str__(self):
         return f"Order {self.id} by {self.user.username}"
 
