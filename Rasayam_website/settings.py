@@ -492,3 +492,10 @@ if os.getenv('EMAIL_HOST'):
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
     DEFAULT_FROM_EMAIL = 'Rasayam Local <no-reply@localhost>'
+
+# ==========================================
+# DELHIVERY SHIPPING INTEGRATION
+# ==========================================
+DELHIVERY_API_TOKEN = os.getenv('DELHIVERY_API_TOKEN', '')
+DELHIVERY_BASE_URL = os.getenv('DELHIVERY_BASE_URL', 'https://track.delhivery.com')
+
