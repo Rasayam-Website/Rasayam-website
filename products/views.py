@@ -206,7 +206,12 @@ def cart(request):
                 ))
         total_price = sum(item.total_item_price for item in cart_items)
 
-    recommended_items = Product.objects.all().exclude(category__isnull=True).select_related('category').order_by('?')[:4]
+    # Show in-stock recommendations (prefer items with categories if available, else all in-stock)
+    recommended_items = Product.objects.filter(stock__gt=0).exclude(category__isnull=True).select_related('category').order_by('?')[:4]
+    if not recommended_items.exists():
+        recommended_items = Product.objects.filter(stock__gt=0).order_by('?')[:4]
+    if not recommended_items.exists():
+        recommended_items = Product.objects.all().order_by('?')[:4]
     
     context = {
         'cart_items': cart_items,
@@ -759,8 +764,9 @@ def payment_verify(request):
             order.save()
 
             # 3. SUCCESS: Clear only the items from this completed order
-            cart = Cart.objects.get(user=request.user)
-            clear_paid_cart_items(cart, order)
+            cart = Cart.objects.filter(user=request.user).first()
+            if cart:
+                clear_paid_cart_items(cart, order)
 
             messages.success(request, "Payment verified! Your order is being prepared.")
             return redirect('payment_success', order_id=order.id)
@@ -848,6 +854,10 @@ def order_detail_view(request, order_id):    # This prevents users from accessin
 
 def add_to_cart(request, product_id):
     product = get_object_or_404(Product, id=product_id)
+    if product.stock <= 0:
+        messages.error(request, f"Sorry, '{product.name}' is currently out of stock.")
+        return redirect(request.META.get('HTTP_REFERER', 'shop'))
+
     selected_size = get_selected_size_from_request(request, product)
     
     if request.user.is_authenticated:
@@ -907,6 +917,12 @@ def remove_from_cart(request, item_id):
 @ratelimit(key='ip', rate='30/m', method='POST')  # Prevent spam adds (use IP to include guests)
 def add_to_cart_ajax(request, product_id):
     product = get_object_or_404(Product, id=product_id)
+    if product.stock <= 0:
+        return JsonResponse({
+            'status': 'error',
+            'message': f"'{product.name}' is currently out of stock.",
+        }, status=400)
+
     selected_size = get_selected_size_from_request(request, product)
     
     if request.user.is_authenticated:

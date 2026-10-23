@@ -88,9 +88,9 @@ var options = {
         form.submit();
     },
     "prefill": {
-        "name": "{{ request.user.username }}",
+        "name": "{{ request.user.get_full_name|default:request.user.username }}",
         "email": "{{ request.user.email }}",
-        "contact": "{{ request.user.customerprofile.phone_number }}"
+        "contact": "{{ request.user.customerprofile.phone|default:'' }}"
     },
     "theme": {
         "color": "#D4AF37" 

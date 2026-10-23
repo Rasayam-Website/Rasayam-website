@@ -53,9 +53,15 @@
                         data-name="{{ product.name }}" 
                         data-price="{{ product.price }}" 
                         data-img="{% if product.image %}{{ product.image.url }}{% endif %}">
-                        <button id="add-btn-category-{{ product.id }}" type="button" class="btn-cart" onclick="addToCartAsync('{{ product.id }}', '', this)">
-                            ADD TO SELECTION
-                        </button>
+                        {% if product.stock <= 0 %}
+                            <button class="btn-cart" disabled style="opacity: 0.6; cursor: not-allowed; background: #e0e0e0; color: #777; border-color: #ccc;">
+                                OUT OF STOCK
+                            </button>
+                        {% else %}
+                            <button id="add-btn-category-{{ product.id }}" type="button" class="btn-cart" onclick="addToCartAsync('{{ product.id }}', '', this)">
+                                ADD TO SELECTION
+                            </button>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -63,6 +69,20 @@
                 <p>This collection is currently being curated.</p>
             {% endfor %}
         </div>
+
+        {% if products.has_other_pages %}
+        <div style="display: flex; justify-content: center; align-items: center; gap: 12px; padding: 40px 0 20px; font-size: 0.75rem; letter-spacing: 1px;">
+            {% if products.has_previous %}
+                <a href="?page={{ products.previous_page_number }}" style="padding: 10px 20px; border: 1px solid var(--border); text-decoration: none; color: var(--royal); transition: border-color 0.2s;"
+                   onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">← PREV</a>
+            {% endif %}
+            <span style="color: #aaa;">{{ products.number }} / {{ products.paginator.num_pages }}</span>
+            {% if products.has_next %}
+                <a href="?page={{ products.next_page_number }}" style="padding: 10px 20px; border: 1px solid var(--border); text-decoration: none; color: var(--royal); transition: border-color 0.2s;"
+                   onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">NEXT →</a>
+            {% endif %}
+        </div>
+        {% endif %}
     </section>
 </div>
 {% endblock %}

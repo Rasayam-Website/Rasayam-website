@@ -68,22 +68,28 @@
 
         <!-- CTAs -->
         <div style="display: flex; flex-direction: column; gap: 14px;">
-            <form action="{% url 'add_to_cart' product.id %}" method="POST" class="cart-action-form" onsubmit="return addProductDetailToCart(event, '{{ product.id }}');">
-                {% csrf_token %}
-                <input type="hidden" name="selected_size" class="selected-size-input">
-                <button id="add-btn-detail-{{ product.id }}" type="submit" class="btn-cart" style="width: 100%; padding: 20px;">
-                    ADD TO SELECTION
+            {% if product.stock <= 0 %}
+                <button type="button" class="btn-cart" disabled style="width: 100%; padding: 20px; opacity: 0.6; cursor: not-allowed; background: #e0e0e0; color: #777; border-color: #ccc;">
+                    OUT OF STOCK
                 </button>
-            </form>
+            {% else %}
+                <form action="{% url 'add_to_cart' product.id %}" method="POST" class="cart-action-form" onsubmit="return addProductDetailToCart(event, '{{ product.id }}');">
+                    {% csrf_token %}
+                    <input type="hidden" name="selected_size" class="selected-size-input">
+                    <button id="add-btn-detail-{{ product.id }}" type="submit" class="btn-cart" style="width: 100%; padding: 20px;">
+                        ADD TO SELECTION
+                    </button>
+                </form>
 
-            <form action="{% url 'add_to_cart' product.id %}" method="POST">
-                {% csrf_token %}
-                <input type="hidden" name="buy_now" value="true">
-                <input type="hidden" name="selected_size" class="selected-size-input">
-                <button type="submit" class="btn-gold" style="width: 100%; padding: 20px; font-size: 0.72rem; letter-spacing: 2px;">
-                    BUY IT NOW
-                </button>
-            </form>
+                <form action="{% url 'add_to_cart' product.id %}" method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="buy_now" value="true">
+                    <input type="hidden" name="selected_size" class="selected-size-input">
+                    <button type="submit" class="btn-gold" style="width: 100%; padding: 20px; font-size: 0.72rem; letter-spacing: 2px;">
+                        BUY IT NOW
+                    </button>
+                </form>
+            {% endif %}
 
             <button onclick="openWishlistModal('{{ product.id }}')"
                     style="width: 100%; padding: 20px; background: #fff; color: var(--gold); border: 1px solid var(--gold); font-size: 0.72rem; letter-spacing: 2px; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.25s ease, color 0.25s ease; text-transform: uppercase;"

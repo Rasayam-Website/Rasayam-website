@@ -24,14 +24,16 @@ class RasayamCoreSystemTests(TestCase):
             price=4500,
             category=self.category_odisha,
             seller_tag="Handloom Artisan",
-            image="mock_ikat.jpg"  # 🌟 Added fake image string
+            image="mock_ikat.jpg",  # 🌟 Added fake image string
+            stock=10,
         )
         self.item_phulkari = Product.objects.create(
             name="Heritage Phulkari Suit",
             price=6800,
             category=self.category_punjab,
             seller_tag="Vintage Craft",
-            image="mock_phulkari.jpg"  # 🌟 Added fake image string
+            image="mock_phulkari.jpg",  # 🌟 Added fake image string
+            stock=10,
         )
 
         self.category_plain = Category.objects.create(name="Plain Cotton", slug="plain-cotton")
@@ -41,6 +43,7 @@ class RasayamCoreSystemTests(TestCase):
             price=2200,
             category=self.category_plain,
             seller_tag="Everyday Craft",
+            stock=10,
         )
 
     def test_homepage_render_and_grid_context(self):

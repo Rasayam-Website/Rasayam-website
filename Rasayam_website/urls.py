@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.db import connection
 from django.core.cache import cache
 
@@ -67,8 +67,20 @@ def health_check(request):
     status = 200 if ok else 503
     return JsonResponse({'status': 'ok' if ok else 'degraded', 'checks': checks}, status=status)
 
+def robots_txt(request):
+    content = "User-agent: *\nDisallow: /admin/\nDisallow: /account/\nDisallow: /cart/\nAllow: /\n"
+    return HttpResponse(content, content_type="text/plain")
+
+
+def favicon_ico(request):
+    # Return 204 No Content so browsers and bots stop generating 404 error logs
+    return HttpResponse(status=204)
+
+
 urlpatterns = [
     path('health/', health_check, name='health_check'),
+    path('robots.txt', robots_txt, name='robots_txt'),
+    path('favicon.ico', favicon_ico, name='favicon_ico'),
     path('admin/', admin.site.urls),
     path('', include('products.urls')),
 ]

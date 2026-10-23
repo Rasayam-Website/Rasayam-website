@@ -40,9 +40,10 @@ function addToCartAsync(productId, selectedSize = "", trigger = null) {
     .then(response => response.json())
     .then(data => {
         if (data.status === 'success') {
-            // Update Navbar Badge
-            const badge = document.getElementById('cart-count');
-            if (badge) badge.innerText = data.cart_count;
+            // Update Navbar Badge (both desktop and mobile)
+            document.querySelectorAll('#cart-count, .mobile-cart-badge, .cart-badge').forEach(badge => {
+                badge.innerText = data.cart_count;
+            });
 
             // Transform Button to "View Bag" Link
             if (btn) {

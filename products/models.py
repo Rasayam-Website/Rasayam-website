@@ -46,14 +46,6 @@ class Address(models.Model):
         ordering = ['-is_default', '-updated_at']
         verbose_name_plural = 'Addresses'
 
-    def save(self, *args, **kwargs):
-        if self.is_default:
-            Address.objects.filter(user=self.user).exclude(pk=self.pk).update(is_default=False)
-        elif not self.pk and not Address.objects.filter(user=self.user, is_active=True).exists():
-            # First active address automatically becomes default
-            self.is_default = True
-        super().save(*args, **kwargs)
-
     def __str__(self):
         return f"{self.full_name} — {self.address_line1}, {self.city} ({self.pincode})"
 

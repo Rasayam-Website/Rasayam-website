@@ -55,7 +55,11 @@
                     <p class="price">₹{{ product.price|stringformat:"d" }}</p>
 
                     <div class="product-action-container">
-                        {% if product.id in cart_product_ids %}
+                        {% if product.stock <= 0 %}
+                            <button class="btn-cart" disabled style="opacity: 0.6; cursor: not-allowed; background: #e0e0e0; color: #777; border-color: #ccc;">
+                                OUT OF STOCK
+                            </button>
+                        {% elif product.id in cart_product_ids %}
                             <a href="{% url 'cart' %}" class="btn-cart is-in-cart">
                                 IN SELECTION — VIEW BAG
                             </a>
@@ -77,15 +81,15 @@
         </div>
 
         <!-- Pagination -->
-        {% if is_paginated %}
+        {% if items.has_other_pages %}
         <div style="display: flex; justify-content: center; align-items: center; gap: 12px; padding: 40px 0 20px; font-size: 0.75rem; letter-spacing: 1px;">
-            {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}" style="padding: 10px 20px; border: 1px solid var(--border); text-decoration: none; color: var(--royal); transition: border-color 0.2s;"
+            {% if items.has_previous %}
+                <a href="?page={{ items.previous_page_number }}" style="padding: 10px 20px; border: 1px solid var(--border); text-decoration: none; color: var(--royal); transition: border-color 0.2s;"
                    onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">← PREV</a>
             {% endif %}
-            <span style="color: #aaa;">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-            {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}" style="padding: 10px 20px; border: 1px solid var(--border); text-decoration: none; color: var(--royal); transition: border-color 0.2s;"
+            <span style="color: #aaa;">{{ items.number }} / {{ items.paginator.num_pages }}</span>
+            {% if items.has_next %}
+                <a href="?page={{ items.next_page_number }}" style="padding: 10px 20px; border: 1px solid var(--border); text-decoration: none; color: var(--royal); transition: border-color 0.2s;"
                    onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">NEXT →</a>
             {% endif %}
         </div>

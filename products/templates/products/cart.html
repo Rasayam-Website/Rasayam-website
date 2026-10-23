@@ -95,7 +95,7 @@
 
                 <div style="margin-top: 20px;">
                     {% if user.is_authenticated %}
-                        <button type="submit" id="checkout-btn" class="btn-cart" style="width: 100%; padding: 20px;"{% if not addresses %} disabled title="Add a delivery address first" style="opacity: 0.5;"{% endif %}>
+                        <button type="submit" id="checkout-btn" class="btn-cart" style="width: 100%; padding: 20px;{% if not addresses %} opacity: 0.5; cursor: not-allowed;{% endif %}"{% if not addresses %} disabled title="Please add a delivery address first"{% endif %}>
                             PROCEED TO SECURE PAYMENT
                         </button>
                     {% else %}

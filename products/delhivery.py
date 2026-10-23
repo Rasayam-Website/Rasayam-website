@@ -197,15 +197,38 @@ def create_shipment(order) -> dict:
     url = f'{DELHIVERY_BASE_URL}/api/cmu/create.json'
 
     # Parse the shipping_address text into components
-    addr_lines = order.shipping_address.split('\n') if order.shipping_address else []
+    addr_lines = [l.strip() for l in (order.shipping_address or '').split('\n') if l.strip()]
     name = addr_lines[0] if len(addr_lines) > 0 else 'Customer'
-    add = ', '.join(addr_lines[1:4]) if len(addr_lines) > 1 else ''
-    phone_line = addr_lines[-1] if len(addr_lines) >= 1 else ''
-    phone = phone_line.replace('Phone:', '').strip() if 'Phone:' in phone_line else ''
 
-    # Extract pincode from address
+    phone = ''
+    for line in addr_lines:
+        if line.startswith('Phone:'):
+            phone = line.replace('Phone:', '').strip()
+            break
+    if not phone and addr_lines:
+        last = addr_lines[-1]
+        digits = re.sub(r'\D', '', last)
+        if len(digits) >= 10:
+            phone = digits[-10:]
+
     pin_match = re.search(r'\b(\d{6})\b', order.shipping_address or '')
     pincode = pin_match.group(1) if pin_match else ''
+
+    city = ''
+    state = ''
+    for line in addr_lines:
+        if ' — ' in line or ' - ' in line:
+            parts = re.split(r'\s*[—-—]\s*', line)
+            if parts and ',' in parts[0]:
+                cs = parts[0].split(',')
+                city = cs[0].strip()
+                state = cs[1].strip() if len(cs) > 1 else ''
+
+    street_lines = [
+        l for l in addr_lines[1:]
+        if not l.startswith('Phone:') and not re.search(r'\b\d{6}\b', l)
+    ]
+    add = ', '.join(street_lines) if street_lines else (order.shipping_address or '')
 
     # Build order items description
     items = order.items.all()
@@ -219,8 +242,8 @@ def create_shipment(order) -> dict:
             'name': name,
             'add': add or order.shipping_address,
             'pin': pincode,
-            'city': '',
-            'state': '',
+            'city': city,
+            'state': state,
             'country': 'India',
             'phone': phone,
             'order': f'RASAYAM-{order.id}',

@@ -30,6 +30,20 @@
                 </div>
             {% endfor %}
         </div>
+
+        {% if results.has_other_pages %}
+        <div style="display: flex; justify-content: center; align-items: center; gap: 12px; padding: 40px 0 20px; font-size: 0.75rem; letter-spacing: 1px;">
+            {% if results.has_previous %}
+                <a href="?q={{ query|urlencode }}&page={{ results.previous_page_number }}" style="padding: 10px 20px; border: 1px solid var(--border); text-decoration: none; color: var(--royal); transition: border-color 0.2s;"
+                   onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">← PREV</a>
+            {% endif %}
+            <span style="color: #aaa;">{{ results.number }} / {{ results.paginator.num_pages }}</span>
+            {% if results.has_next %}
+                <a href="?q={{ query|urlencode }}&page={{ results.next_page_number }}" style="padding: 10px 20px; border: 1px solid var(--border); text-decoration: none; color: var(--royal); transition: border-color 0.2s;"
+                   onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">NEXT →</a>
+            {% endif %}
+        </div>
+        {% endif %}
     {% else %}
         <div style="text-align: center; padding: 100px 0;">
             <p style="font-size: 1.1rem; color: #666;">We couldn't find anything matching your search.</p>

@@ -100,6 +100,7 @@
 </section>
 {% endif %}
 
+{% if categories %}
 <!-- REFINED SHOP BY VARIETY SECTION -->
 <section class="category-section container" style="padding: 60px 0;">
     
@@ -141,6 +142,44 @@
         .category-card { height: 180px !important; }
     }
 </style>
+{% endif %}
+
+{% if items %}
+<!-- FEATURED CURATED MASTERPIECES -->
+<section class="container" style="padding: 40px 0 70px;">
+    <div style="text-align: center; margin-bottom: 45px;">
+        <span style="font-size: 0.68rem; letter-spacing: 3px; color: var(--gold); text-transform: uppercase; font-weight: 600;">The Atelier</span>
+        <h2 class="playfair" style="font-size: clamp(1.8rem, 4vw, 2.4rem); font-weight: 400; margin: 8px 0 0;">Curated Masterpieces</h2>
+    </div>
+
+    <div class="product-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 30px;">
+        {% for product in items %}
+        <div class="product-card" style="border: 1px solid var(--border); background: #fff; border-radius: 4px; overflow: hidden; transition: transform 0.3s ease, box-shadow 0.3s ease;">
+            <div style="position: relative; height: 380px; overflow: hidden; background: #f9f9f9;">
+                <a href="{% url 'product_detail' product.id %}" style="display: block; height: 100%;">
+                    {% if product.image %}
+                        <img src="{{ product.image.url }}" alt="{{ product.name }}" style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease;">
+                    {% else %}
+                        <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #f4f1ec; color: #9a846a; font-size: 0.75rem; letter-spacing: 2px;">
+                            RASAYAM
+                        </div>
+                    {% endif %}
+                </a>
+            </div>
+            <div style="padding: 20px; text-align: center;">
+                <h3 class="playfair" style="font-size: 1.05rem; margin: 0 0 6px; font-weight: 400;">{{ product.name }}</h3>
+                <p style="color: var(--gold); font-weight: 600; font-size: 1rem; margin: 0 0 14px;">₹{{ product.price|stringformat:"d" }}</p>
+                <a href="{% url 'product_detail' product.id %}" class="btn-gold" style="display: block; padding: 10px 16px; font-size: 0.68rem; letter-spacing: 1.5px; text-decoration: none; text-align: center;">VIEW DETAILS</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div style="text-align: center; margin-top: 45px;">
+        <a href="{% url 'shop' %}" class="btn-shop" style="border: 1px solid #1a1a1a; background: #1a1a1a; color: #fff;">EXPLORE ENTIRE COLLECTION</a>
+    </div>
+</section>
+{% endif %}
 
 <section class="offers-section container" style="padding-bottom: 60px;">
     <h3>Exclusive Offers</h3>
