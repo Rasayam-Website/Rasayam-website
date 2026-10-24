@@ -12,7 +12,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
-from django.views.decorators.cache import cache_page
+from django.views.decorators.cache import cache_page, never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils import timezone
@@ -99,7 +99,7 @@ def get_razorpay_client():
 
 # --- 1. Main Display Views ---
 
-@cache_page(60 * 5)  # Cache for 5 minutes
+@never_cache
 def index(request):
     banners = Banner.objects.filter(active=True).order_by('order')
     categories = Category.objects.all().order_by('order')
