@@ -149,14 +149,14 @@ flowchart TD
     CleanupJob --> LatePay["Customer completes payment after 20 mins<br/>(Late Capture / Webhook arrives)"]
     
     LatePay --> CheckLate{"Order status == 'Cancelled'?<br/><i>products/views.py:808 & 898</i>"}
-    CheckLate -- "Yes in /webhooks/razorpay/" --> RevWeb["Lock row with select_for_update()<br/>Set status='Payment Review'<br/>Save payment_id & amount<br/>Do NOT change stock, do NOT refund<br/>Return HTTP 200 {'status': 'payment_review'}"]
-    CheckLate -- "Yes in /payment-verify/" --> RevView["Lock row with select_for_update()<br/>Set status='Payment Review'<br/>Save payment_id, signature, transaction_id<br/>Render neutral products/payment_review.html"]
+    CheckLate -- "Yes in /webhooks/razorpay/" --> RevWeb["Lock row with select_for_update()<br/>Set status='Payment Review'<br/>Save payment_id & transaction_id (preserve total_amount)<br/>Log warning on mismatch<br/>Clear cart with clear_paid_cart_items<br/>Return HTTP 200 {'status': 'payment_review'}"]
+    CheckLate -- "Yes in /payment-verify/" --> RevView["Lock row with select_for_update()<br/>Set status='Payment Review'<br/>Save payment_id, signature, transaction_id<br/>Clear cart with clear_paid_cart_items<br/>Render neutral products/payment_review.html"]
     
     RevWeb --> AdminResolve{"Admin Manual Resolution<br/><i>products/admin.py:OrderAdmin</i>"}
     RevView --> AdminResolve
     
-    AdminResolve -- "Action: Confirm and re-reserve stock" --> Act1["products/admin.py:confirm_and_re_reserve_stock<br/>Lock products with select_for_update()<br/>Verify all items in stock<br/>If out of stock: report items & abort<br/>If available: decrement stock & mark Paid"]
-    AdminResolve -- "Action: Refund via Razorpay" --> Act2["products/admin.py:refund_via_razorpay<br/>Call client.payment.refund(payment_id)<br/>Save refund_id on Order<br/>Mark status='Refunded'"]
+    AdminResolve -- "Action: Confirm and re-reserve stock" --> Act1["products/admin.py:confirm_and_re_reserve_stock<br/>Reject if status != 'Payment Review' or empty payment_id<br/>Lock products with select_for_update()<br/>Verify all items in stock<br/>If out of stock: report items & abort<br/>If available: decrement stock, mark Paid & clear cart"]
+    AdminResolve -- "Action: Refund via Razorpay" --> Act2["products/admin.py:refund_via_razorpay<br/>Reject if status != 'Payment Review'<br/>Call client.payment.refund(payment_id, {}) [full refund]<br/>Save refund_id on Order<br/>Mark status='Refunded'"]
 ```
 
 ---
@@ -410,9 +410,15 @@ flowchart LR
           order.status = 'Payment Review'
           order.razorpay_payment_id = payment_id
           order.transaction_id = payment_id
-          if amount_decimal is not None:
-              order.total_amount = amount_decimal
-          order.save(update_fields=['status', 'razorpay_payment_id', 'transaction_id', 'total_amount'])
+          order.save(update_fields=['status', 'razorpay_payment_id', 'transaction_id'])
+          if amount_decimal is not None and amount_decimal != order.total_amount:
+              logger.warning(
+                  "Late capture amount mismatch for Order #%s: captured ₹%s, expected ₹%s",
+                  order.id, amount_decimal, order.total_amount
+              )
+          cart = Cart.objects.filter(user=order.user).first()
+          if cart:
+              clear_paid_cart_items(cart, order)
           return JsonResponse({'status': 'payment_review'})
       order.is_paid = True
       order.status = 'Paid'
@@ -421,11 +427,11 @@ flowchart LR
 - **Idempotency Guarantees:**
   - Repeated deliveries for an order already `Paid` return HTTP 200 without duplicate execution.
   - Repeated deliveries for an order already in `Payment Review` return HTTP 200 without changing state.
-  - Late captures arriving for `Cancelled` orders are intercepted before any stock mutations occur, moving safely to `Payment Review`.
+  - Late captures arriving for `Cancelled` orders are intercepted before any stock mutations occur, moving safely to `Payment Review`. `order.total_amount` is preserved (never overwritten), a warning is logged on price mismatch, and the customer's cart is pruned with `clear_paid_cart_items`.
 
 ### 2. Browser Verification Path (`payment_verify`)
 - **Endpoint:** `products/views.py:payment_verify`
-- **Mechanism:** Acquires row lock via `select_for_update()`. If `order.status == 'Cancelled'`, sets status to `'Payment Review'`, records payment credentials, and renders `products/payment_review.html` informing the customer that inventory is being verified by the concierge team.
+- **Mechanism:** Acquires row lock via `select_for_update()`. If `order.status == 'Cancelled'`, sets status to `'Payment Review'`, records payment credentials, clears paid items from the customer's cart via `clear_paid_cart_items(cart, order)`, and renders `products/payment_review.html` informing the customer that inventory is being verified by the concierge team.
 
 ### 3. Stock Locking & Recovery Concurrency
 - **Checkout Reservation (`products/views.py:save_order`):** Product rows locked with `select_for_update()` inside `transaction.atomic()`. Concurrent requests serialize at the DB row level, preventing overselling.
@@ -434,13 +440,13 @@ flowchart LR
 
 ### 4. Admin Action Concurrency & Safety
 - **Action 1: "Confirm and re-reserve stock" (`products/admin.py:OrderAdmin.confirm_and_re_reserve_stock`):**
-  - Evaluates `if order.is_paid or order.status == 'Paid':` (idempotent skip).
+  - Evaluates `if order.status != 'Payment Review' or not order.razorpay_payment_id:` (strictly rejects unpaid Pending, Paid, or Shipped orders with an error message).
   - Inside `transaction.atomic()`, locks `Product` rows with `select_for_update()`.
   - Verifies stock for all snapshot items. If any item is insufficient, reports the exact item name, requested quantity, and available quantity via admin error message and aborts without partial deductions.
-  - If all items available, decrements stock and sets `is_paid = True, status = 'Paid'`.
+  - If all items available, decrements stock, sets `is_paid = True, status = 'Paid'`, and removes paid items from the customer's active cart via `clear_paid_cart_items(cart, order)`.
 - **Action 2: "Refund via Razorpay" (`products/admin.py:OrderAdmin.refund_via_razorpay`):**
-  - Evaluates `if order.status == 'Refunded' or order.refund_id:` (idempotent skip).
-  - Invokes `client.payment.refund(order.razorpay_payment_id, {'amount': paise})`.
+  - Evaluates `if order.status != 'Payment Review':` (strictly rejects Shipped, Delivered, or Pending orders).
+  - Invokes `client.payment.refund(order.razorpay_payment_id, {})` with an empty dictionary, instructing Razorpay to issue a full 100% refund of the captured transaction without risking miscalculations from stored `total_amount`.
   - Stores `order.refund_id = refund_id` and sets `status = 'Refunded'`.
 
 ---
