@@ -1,3 +1,4 @@
+from django.db import transaction
 # products/admin.py
 from django.contrib import admin
 from django.utils.html import format_html
@@ -136,6 +137,21 @@ class ReviewAdmin(ModelAdmin):
 
 # --- 5. Orders & Payments ---
 
+class PaymentReviewFilter(admin.SimpleListFilter):
+    title = 'Payment Review'
+    parameter_name = 'payment_review'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('review_needed', 'Needs Payment Review'),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == 'review_needed':
+            return queryset.filter(status='Payment Review')
+        return queryset
+
+
 class OrderItemInline(TabularInline):
     model = OrderItem
     extra = 0
@@ -145,17 +161,17 @@ class OrderItemInline(TabularInline):
 @admin.register(Order)
 class OrderAdmin(ModelAdmin):
     list_display = ('id', 'user', 'total_amount', 'is_paid', 'status', 'delhivery_waybill', 'created_at')
-    list_filter = ('is_paid', 'status', 'created_at')
+    list_filter = ('is_paid', 'status', PaymentReviewFilter, 'created_at')
     
     # Razorpay fields are locked to maintain transaction integrity
-    readonly_fields = ('razorpay_order_id', 'razorpay_payment_id', 'razorpay_signature')
+    readonly_fields = ('razorpay_order_id', 'razorpay_payment_id', 'razorpay_signature', 'refund_id')
     
     fieldsets = (
         (None, {
             'fields': ('user', 'status', 'total_amount', 'is_paid', 'shipping_address'),
         }),
         ('Payment (Razorpay)', {
-            'fields': ('razorpay_order_id', 'razorpay_payment_id', 'razorpay_signature', 'transaction_id'),
+            'fields': ('razorpay_order_id', 'razorpay_payment_id', 'razorpay_signature', 'transaction_id', 'refund_id'),
             'classes': ('collapse',),
         }),
         ('Shipping (Delhivery)', {
@@ -166,7 +182,7 @@ class OrderAdmin(ModelAdmin):
     
     inlines = [OrderItemInline]
     fixed_submit_bar = True
-    actions = ['download_packing_slip']
+    actions = ['download_packing_slip', 'confirm_and_re_reserve_stock', 'refund_via_razorpay']
 
     @admin.action(description="🖨️ Download Packing Slip")
     def download_packing_slip(self, request, queryset):
@@ -176,6 +192,80 @@ class OrderAdmin(ModelAdmin):
             return redirect('admin_packing_slip', order_id=order.id)
         else:
             self.message_user(request, "Please select only one order to download the slip at a time.", level='warning')
+
+    @admin.action(description="Confirm and re-reserve stock")
+    def confirm_and_re_reserve_stock(self, request, queryset):
+        for order in queryset:
+            if order.is_paid or order.status == 'Paid':
+                self.message_user(request, f"Order #{order.id} is already marked as Paid.", level='info')
+                continue
+
+            snapshot = order.original_cart_items or []
+            if not snapshot:
+                self.message_user(request, f"Order #{order.id} has no cart items snapshot to verify stock.", level='warning')
+                continue
+
+            with transaction.atomic():
+                product_ids = [entry.get('product_id') for entry in snapshot if entry.get('product_id')]
+                locked_products = {
+                    p.pk: p
+                    for p in Product.objects.select_for_update().filter(pk__in=product_ids)
+                }
+
+                out_of_stock = []
+                for entry in snapshot:
+                    p_id = entry.get('product_id')
+                    qty = int(entry.get('quantity') or 0)
+                    product = locked_products.get(p_id)
+                    if not product:
+                        out_of_stock.append(f"Product ID {p_id} (not found)")
+                    elif product.stock < qty:
+                        out_of_stock.append(f"{product.name} (requested {qty}, available {product.stock})")
+
+                if out_of_stock:
+                    self.message_user(
+                        request,
+                        f"Cannot confirm Order #{order.id}: Insufficient stock for {', '.join(out_of_stock)}.",
+                        level='error'
+                    )
+                    continue
+
+                for entry in snapshot:
+                    p_id = entry.get('product_id')
+                    qty = int(entry.get('quantity') or 0)
+                    product = locked_products[p_id]
+                    product.stock -= qty
+                    product.save(update_fields=['stock'])
+
+                order.is_paid = True
+                order.status = 'Paid'
+                order.save(update_fields=['is_paid', 'status'])
+                self.message_user(request, f"Order #{order.id} confirmed and stock re-reserved successfully.", level='success')
+
+    @admin.action(description="Refund via Razorpay")
+    def refund_via_razorpay(self, request, queryset):
+        from .views import get_razorpay_client
+        for order in queryset:
+            if order.status == 'Refunded' or order.refund_id:
+                self.message_user(request, f"Order #{order.id} is already refunded (Refund ID: {order.refund_id}).", level='info')
+                continue
+
+            if not order.razorpay_payment_id:
+                self.message_user(request, f"Order #{order.id} has no Razorpay payment ID to refund.", level='error')
+                continue
+
+            try:
+                client = get_razorpay_client()
+                amount_in_paise = int(order.total_amount * 100)
+                refund_payload = {'amount': amount_in_paise} if amount_in_paise > 0 else {}
+                refund_resp = client.payment.refund(order.razorpay_payment_id, refund_payload)
+                refund_id = refund_resp.get('id', '')
+                order.refund_id = refund_id
+                order.status = 'Refunded'
+                order.save(update_fields=['status', 'refund_id'])
+                self.message_user(request, f"Order #{order.id} refunded successfully via Razorpay (Refund ID: {refund_id}).", level='success')
+            except Exception as e:
+                self.message_user(request, f"Failed to refund Order #{order.id}: {e}", level='error')
 
 
 

@@ -200,10 +200,12 @@ class Order(models.Model):
         ('Shipped', 'Shipped'),
         ('Delivered', 'Delivered'),
         ('Cancelled', 'Cancelled'),
+        ('Payment Review', 'Payment Review'),
+        ('Refunded', 'Refunded'),
     ]
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
     created_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending', db_index=True)
+    status = models.CharField(max_length=25, choices=STATUS_CHOICES, default='Pending', db_index=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     original_cart_items = models.JSONField(default=list, blank=True)
     shipping_address = models.TextField(blank=True, default='')
@@ -215,6 +217,7 @@ class Order(models.Model):
     razorpay_payment_id = models.CharField(max_length=100, blank=True, null=True)
     razorpay_signature = models.CharField(max_length=255, blank=True, null=True)
     is_paid = models.BooleanField(default=False)
+    refund_id = models.CharField(max_length=100, blank=True, null=True, help_text='Razorpay refund ID if order was refunded')
 
     # --- DELHIVERY SHIPPING FIELDS ---
     delhivery_waybill = models.CharField('Delhivery Waybill', max_length=100, blank=True, null=True, db_index=True,

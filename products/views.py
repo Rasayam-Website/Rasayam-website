@@ -786,19 +786,35 @@ def payment_verify(request):
             razorpay_client = get_razorpay_client()
             razorpay_client.utility.verify_payment_signature(params_dict)
 
-            # 2. Update the Order in your database
-            order = Order.objects.get(razorpay_order_id=razorpay_order_id, user=request.user)
-            order.razorpay_payment_id = payment_id
-            order.razorpay_signature = signature
-            order.transaction_id = payment_id
-            order.is_paid = True
-            order.status = 'Paid'
-            order.save()
+            # 2. Update the Order in your database with row lock
+            with transaction.atomic():
+                order = Order.objects.select_for_update().get(razorpay_order_id=razorpay_order_id, user=request.user)
 
-            # 3. SUCCESS: Clear only the items from this completed order
-            cart = Cart.objects.filter(user=request.user).first()
-            if cart:
-                clear_paid_cart_items(cart, order)
+                # Late capture check: Order was cancelled by stock recovery cron
+                if order.status == 'Cancelled':
+                    order.status = 'Payment Review'
+                    order.razorpay_payment_id = payment_id
+                    order.razorpay_signature = signature
+                    order.transaction_id = payment_id
+                    order.save(update_fields=['status', 'razorpay_payment_id', 'razorpay_signature', 'transaction_id'])
+                    return render(request, 'products/payment_review.html', {'order': order})
+
+                # Already in Payment Review
+                if order.status == 'Payment Review':
+                    return render(request, 'products/payment_review.html', {'order': order})
+
+                if not order.is_paid:
+                    order.razorpay_payment_id = payment_id
+                    order.razorpay_signature = signature
+                    order.transaction_id = payment_id
+                    order.is_paid = True
+                    order.status = 'Paid'
+                    order.save(update_fields=['razorpay_payment_id', 'razorpay_signature', 'transaction_id', 'is_paid', 'status'])
+
+                    # 3. SUCCESS: Clear only the items from this completed order
+                    cart = Cart.objects.filter(user=request.user).first()
+                    if cart:
+                        clear_paid_cart_items(cart, order)
 
             messages.success(request, "Payment verified! Your order is being prepared.")
             return redirect('payment_success', order_id=order.id)
@@ -859,19 +875,44 @@ def razorpay_webhook(request):
         # Acknowledge unhandled events without error so Razorpay stops retrying
         return JsonResponse({'status': 'ignored'})
 
-    # 3. Flip order to Paid
+    # 3. Handle payment.captured
     try:
         payment_entity = payload['payload']['payment']['entity']
         razorpay_order_id = payment_entity.get('order_id')
         payment_id = payment_entity.get('id')
+        amount_paise = payment_entity.get('amount')
+        amount_decimal = (Decimal(amount_paise) / Decimal(100)) if amount_paise is not None else None
 
-        order = Order.objects.get(razorpay_order_id=razorpay_order_id)
-        if not order.is_paid:
+        with transaction.atomic():
+            # Lock the order row to prevent race conditions with cancel_expired_orders
+            order = Order.objects.select_for_update().get(razorpay_order_id=razorpay_order_id)
+
+            # Idempotency guard: duplicate delivery for an already Paid order
+            if order.is_paid:
+                return JsonResponse({'status': 'ok'})
+
+            # Idempotency guard: duplicate delivery for an order already in Payment Review
+            if order.status == 'Payment Review':
+                return JsonResponse({'status': 'ok'})
+
+            # Late capture: Order was already cancelled by stock recovery cron
+            if order.status == 'Cancelled':
+                order.status = 'Payment Review'
+                order.razorpay_payment_id = payment_id
+                order.transaction_id = payment_id
+                if amount_decimal is not None:
+                    order.total_amount = amount_decimal
+                order.save(update_fields=['status', 'razorpay_payment_id', 'transaction_id', 'total_amount'])
+                return JsonResponse({'status': 'payment_review'})
+
+            # Normal capture
             order.is_paid = True
             order.status = 'Paid'
             order.razorpay_payment_id = payment_id
-            order.transaction_id = payment_id  # populate unique transaction_id
-            order.save(update_fields=['is_paid', 'status', 'razorpay_payment_id', 'transaction_id'])
+            order.transaction_id = payment_id
+            if amount_decimal is not None and not order.total_amount:
+                order.total_amount = amount_decimal
+            order.save(update_fields=['is_paid', 'status', 'razorpay_payment_id', 'transaction_id', 'total_amount'])
             cart = Cart.objects.filter(user=order.user).first()
             if cart:
                 clear_paid_cart_items(cart, order)

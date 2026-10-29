@@ -339,3 +339,324 @@ class RasayamCoreSystemTests(TestCase):
         session_cart = self.client.session.get('guest_cart')
         self.assertNotIn(key, session_cart)
 
+
+
+import hashlib
+import hmac
+import json
+from decimal import Decimal
+from django.conf import settings
+from django.test import override_settings
+from unittest.mock import patch, MagicMock
+from django.contrib.admin.sites import AdminSite
+from products.admin import OrderAdmin
+
+
+@override_settings(RAZORPAY_WEBHOOK_SECRET="test_webhook_secret_key_123")
+class RazorpayWebhookAndPaymentReviewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="test_buyer_webhook", password="test_password_123")
+        self.category = Category.objects.create(name="Silk Wear", slug="silk-wear")
+        self.product = Product.objects.create(
+            name="Banarasi Saree",
+            price=Decimal("5000.00"),
+            stock=10,
+            category=self.category,
+        )
+        self.webhook_secret = "test_webhook_secret_key_123"
+
+    def _generate_signature(self, payload_bytes):
+        return hmac.new(
+            self.webhook_secret.encode('utf-8'),
+            payload_bytes,
+            hashlib.sha256
+        ).hexdigest()
+
+    def _post_webhook(self, payload_dict, signature=None):
+        payload_bytes = json.dumps(payload_dict).encode('utf-8')
+        if signature is None:
+            signature = self._generate_signature(payload_bytes)
+        return self.client.post(
+            reverse('razorpay_webhook'),
+            data=payload_bytes,
+            content_type='application/json',
+            HTTP_X_RAZORPAY_SIGNATURE=signature
+        )
+
+    def test_webhook_normal_capture(self):
+        """A normal payment.captured webhook flips Pending order to Paid and clears cart items."""
+        cart = Cart.objects.create(user=self.user)
+        cart_item = CartItem.objects.create(cart=cart, product=self.product, quantity=2, price=Decimal("5000.00"))
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("10000.00"),
+            status='Pending',
+            razorpay_order_id='order_norm_123',
+            original_cart_items=[{
+                'cart_item_id': cart_item.id,
+                'product_id': self.product.id,
+                'quantity': 2,
+                'selected_size': '',
+                'price': '5000.00'
+            }]
+        )
+
+        payload = {
+            'event': 'payment.captured',
+            'payload': {
+                'payment': {
+                    'entity': {
+                        'id': 'pay_norm_123',
+                        'order_id': 'order_norm_123',
+                        'amount': 1000000
+                    }
+                }
+            }
+        }
+
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {'status': 'ok'})
+
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        self.assertEqual(order.status, 'Paid')
+        self.assertEqual(order.razorpay_payment_id, 'pay_norm_123')
+        self.assertEqual(order.transaction_id, 'pay_norm_123')
+        self.assertEqual(cart.items.count(), 0)
+
+    def test_webhook_duplicate_capture(self):
+        """Duplicate payment.captured webhook for an already Paid order is a no-op returning 200 OK."""
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Paid',
+            is_paid=True,
+            razorpay_order_id='order_dup_123',
+            razorpay_payment_id='pay_dup_123',
+            transaction_id='pay_dup_123'
+        )
+
+        payload = {
+            'event': 'payment.captured',
+            'payload': {
+                'payment': {
+                    'entity': {
+                        'id': 'pay_dup_123',
+                        'order_id': 'order_dup_123',
+                        'amount': 500000
+                    }
+                }
+            }
+        }
+
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {'status': 'ok'})
+
+        order.refresh_from_db()
+        self.assertTrue(order.is_paid)
+        self.assertEqual(order.status, 'Paid')
+
+    def test_webhook_late_capture_moves_to_payment_review(self):
+        """A capture arriving for a Cancelled order must be marked Payment Review with no stock changes."""
+        initial_stock = self.product.stock
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Cancelled',
+            is_paid=False,
+            razorpay_order_id='order_late_123',
+            original_cart_items=[{
+                'cart_item_id': 101,
+                'product_id': self.product.id,
+                'quantity': 2,
+                'selected_size': '',
+                'price': '5000.00'
+            }]
+        )
+
+        payload = {
+            'event': 'payment.captured',
+            'payload': {
+                'payment': {
+                    'entity': {
+                        'id': 'pay_late_123',
+                        'order_id': 'order_late_123',
+                        'amount': 500000
+                    }
+                }
+            }
+        }
+
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {'status': 'payment_review'})
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'Payment Review')
+        self.assertFalse(order.is_paid)
+        self.assertEqual(order.razorpay_payment_id, 'pay_late_123')
+        self.assertEqual(order.total_amount, Decimal('5000.00'))
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, initial_stock)
+
+    def test_webhook_duplicate_late_capture(self):
+        """Duplicate capture for an order already in Payment Review changes nothing and returns 200 OK."""
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Payment Review',
+            is_paid=False,
+            razorpay_order_id='order_late_dup_123',
+            razorpay_payment_id='pay_late_dup_123',
+            transaction_id='pay_late_dup_123'
+        )
+
+        payload = {
+            'event': 'payment.captured',
+            'payload': {
+                'payment': {
+                    'entity': {
+                        'id': 'pay_late_dup_123',
+                        'order_id': 'order_late_dup_123',
+                        'amount': 500000
+                    }
+                }
+            }
+        }
+
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {'status': 'ok'})
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'Payment Review')
+        self.assertFalse(order.is_paid)
+
+    def test_webhook_invalid_signature(self):
+        """Webhook with invalid signature returns 400 Bad Request."""
+        payload = {
+            'event': 'payment.captured',
+            'payload': {
+                'payment': {
+                    'entity': {
+                        'id': 'pay_invalid_123',
+                        'order_id': 'order_invalid_123',
+                        'amount': 500000
+                    }
+                }
+            }
+        }
+
+        resp = self._post_webhook(payload, signature='invalid_signature_hex')
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {'error': 'Invalid signature'})
+
+    def test_payment_verify_late_capture_renders_payment_review(self):
+        """Browser payment_verify for a Cancelled order sets Payment Review and renders neutral page."""
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Cancelled',
+            is_paid=False,
+            razorpay_order_id='order_verify_late_123'
+        )
+
+        self.client.force_login(self.user)
+        with patch('products.views.get_razorpay_client') as mock_client:
+            mock_instance = MagicMock()
+            mock_client.return_value = mock_instance
+            mock_instance.utility.verify_payment_signature.return_value = True
+
+            resp = self.client.post(reverse('payment_verify'), {
+                'razorpay_payment_id': 'pay_verify_late_123',
+                'razorpay_order_id': 'order_verify_late_123',
+                'razorpay_signature': 'valid_mock_signature'
+            })
+
+            self.assertEqual(resp.status_code, 200)
+            self.assertTemplateUsed(resp, 'products/payment_review.html')
+
+            order.refresh_from_db()
+            self.assertEqual(order.status, 'Payment Review')
+            self.assertFalse(order.is_paid)
+            self.assertEqual(order.razorpay_payment_id, 'pay_verify_late_123')
+
+    def test_admin_confirm_and_re_reserve_stock(self):
+        """Admin action re-reserves stock when available, or warns if insufficient."""
+        site = AdminSite()
+        admin_obj = OrderAdmin(Order, site)
+
+        # 1. Successful re-reservation
+        self.product.stock = 5
+        self.product.save()
+
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Payment Review',
+            is_paid=False,
+            original_cart_items=[{
+                'product_id': self.product.id,
+                'quantity': 2,
+                'selected_size': '',
+                'price': '2500.00'
+            }]
+        )
+
+        request = MagicMock()
+        admin_obj.confirm_and_re_reserve_stock(request, Order.objects.filter(id=order.id))
+
+        order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(order.status, 'Paid')
+        self.assertTrue(order.is_paid)
+        self.assertEqual(self.product.stock, 3)
+
+        # 2. Out of stock failure
+        order2 = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Payment Review',
+            is_paid=False,
+            original_cart_items=[{
+                'product_id': self.product.id,
+                'quantity': 10,
+                'selected_size': '',
+                'price': '500.00'
+            }]
+        )
+
+        admin_obj.confirm_and_re_reserve_stock(request, Order.objects.filter(id=order2.id))
+        order2.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(order2.status, 'Payment Review')
+        self.assertFalse(order2.is_paid)
+        self.assertEqual(self.product.stock, 3)
+
+    def test_admin_refund_via_razorpay(self):
+        """Admin refund calls Razorpay API and marks order Refunded."""
+        site = AdminSite()
+        admin_obj = OrderAdmin(Order, site)
+
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("3500.00"),
+            status='Payment Review',
+            is_paid=False,
+            razorpay_payment_id='pay_refund_test_123'
+        )
+
+        request = MagicMock()
+        with patch('products.views.get_razorpay_client') as mock_client:
+            mock_inst = MagicMock()
+            mock_client.return_value = mock_inst
+            mock_inst.payment.refund.return_value = {'id': 'rfnd_test_123'}
+
+            admin_obj.refund_via_razorpay(request, Order.objects.filter(id=order.id))
+
+            order.refresh_from_db()
+            self.assertEqual(order.status, 'Refunded')
+            self.assertEqual(order.refund_id, 'rfnd_test_123')
