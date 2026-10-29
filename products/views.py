@@ -797,6 +797,9 @@ def payment_verify(request):
                     order.razorpay_signature = signature
                     order.transaction_id = payment_id
                     order.save(update_fields=['status', 'razorpay_payment_id', 'razorpay_signature', 'transaction_id'])
+                    cart = Cart.objects.filter(user=request.user).first()
+                    if cart:
+                        clear_paid_cart_items(cart, order)
                     return render(request, 'products/payment_review.html', {'order': order})
 
                 # Already in Payment Review
@@ -900,9 +903,15 @@ def razorpay_webhook(request):
                 order.status = 'Payment Review'
                 order.razorpay_payment_id = payment_id
                 order.transaction_id = payment_id
-                if amount_decimal is not None:
-                    order.total_amount = amount_decimal
-                order.save(update_fields=['status', 'razorpay_payment_id', 'transaction_id', 'total_amount'])
+                order.save(update_fields=['status', 'razorpay_payment_id', 'transaction_id'])
+                if amount_decimal is not None and amount_decimal != order.total_amount:
+                    logger.warning(
+                        "Late capture amount mismatch for Order #%s: captured ₹%s, expected ₹%s",
+                        order.id, amount_decimal, order.total_amount
+                    )
+                cart = Cart.objects.filter(user=order.user).first()
+                if cart:
+                    clear_paid_cart_items(cart, order)
                 return JsonResponse({'status': 'payment_review'})
 
             # Normal capture

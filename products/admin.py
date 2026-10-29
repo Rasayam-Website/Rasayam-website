@@ -196,8 +196,12 @@ class OrderAdmin(ModelAdmin):
     @admin.action(description="Confirm and re-reserve stock")
     def confirm_and_re_reserve_stock(self, request, queryset):
         for order in queryset:
-            if order.is_paid or order.status == 'Paid':
-                self.message_user(request, f"Order #{order.id} is already marked as Paid.", level='info')
+            if order.status != 'Payment Review' or not order.razorpay_payment_id:
+                self.message_user(
+                    request,
+                    f"Order #{order.id} rejected: only orders in 'Payment Review' with a valid Razorpay payment ID can be confirmed (current status: '{order.status}').",
+                    level='error'
+                )
                 continue
 
             snapshot = order.original_cart_items or []
@@ -240,14 +244,26 @@ class OrderAdmin(ModelAdmin):
                 order.is_paid = True
                 order.status = 'Paid'
                 order.save(update_fields=['is_paid', 'status'])
+
+                # Remove paid items from customer's cart
+                from .models import Cart
+                from .views import clear_paid_cart_items
+                cart = Cart.objects.filter(user=order.user).first()
+                if cart:
+                    clear_paid_cart_items(cart, order)
+
                 self.message_user(request, f"Order #{order.id} confirmed and stock re-reserved successfully.", level='success')
 
     @admin.action(description="Refund via Razorpay")
     def refund_via_razorpay(self, request, queryset):
         from .views import get_razorpay_client
         for order in queryset:
-            if order.status == 'Refunded' or order.refund_id:
-                self.message_user(request, f"Order #{order.id} is already refunded (Refund ID: {order.refund_id}).", level='info')
+            if order.status != 'Payment Review':
+                self.message_user(
+                    request,
+                    f"Order #{order.id} rejected: only orders in 'Payment Review' can be refunded (current status: '{order.status}').",
+                    level='error'
+                )
                 continue
 
             if not order.razorpay_payment_id:
@@ -256,9 +272,7 @@ class OrderAdmin(ModelAdmin):
 
             try:
                 client = get_razorpay_client()
-                amount_in_paise = int(order.total_amount * 100)
-                refund_payload = {'amount': amount_in_paise} if amount_in_paise > 0 else {}
-                refund_resp = client.payment.refund(order.razorpay_payment_id, refund_payload)
+                refund_resp = client.payment.refund(order.razorpay_payment_id, {})
                 refund_id = refund_resp.get('id', '')
                 order.refund_id = refund_id
                 order.status = 'Refunded'

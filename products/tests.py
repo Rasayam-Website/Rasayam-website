@@ -598,6 +598,7 @@ class RazorpayWebhookAndPaymentReviewTests(TestCase):
             total_amount=Decimal("5000.00"),
             status='Payment Review',
             is_paid=False,
+            razorpay_payment_id='pay_confirm_test_1',
             original_cart_items=[{
                 'product_id': self.product.id,
                 'quantity': 2,
@@ -621,6 +622,7 @@ class RazorpayWebhookAndPaymentReviewTests(TestCase):
             total_amount=Decimal("5000.00"),
             status='Payment Review',
             is_paid=False,
+            razorpay_payment_id='pay_confirm_test_2',
             original_cart_items=[{
                 'product_id': self.product.id,
                 'quantity': 10,
@@ -657,6 +659,126 @@ class RazorpayWebhookAndPaymentReviewTests(TestCase):
 
             admin_obj.refund_via_razorpay(request, Order.objects.filter(id=order.id))
 
+            mock_inst.payment.refund.assert_called_once_with('pay_refund_test_123', {})
             order.refresh_from_db()
             self.assertEqual(order.status, 'Refunded')
             self.assertEqual(order.refund_id, 'rfnd_test_123')
+
+    def test_admin_confirm_rejects_unpaid_pending_order(self):
+        """Unpaid Pending orders must not be confirmed by admin action."""
+        site = AdminSite()
+        admin_obj = OrderAdmin(Order, site)
+
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Pending',
+            is_paid=False,
+            razorpay_payment_id='',
+            original_cart_items=[{
+                'product_id': self.product.id,
+                'quantity': 1,
+                'selected_size': '',
+                'price': '5000.00'
+            }]
+        )
+
+        initial_stock = self.product.stock
+        request = MagicMock()
+        admin_obj.confirm_and_re_reserve_stock(request, Order.objects.filter(id=order.id))
+
+        order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(order.status, 'Pending')
+        self.assertFalse(order.is_paid)
+        self.assertEqual(self.product.stock, initial_stock)
+
+    def test_admin_confirm_rejects_shipped_order(self):
+        """Shipped orders must not be confirmed or stock re-reserved."""
+        site = AdminSite()
+        admin_obj = OrderAdmin(Order, site)
+
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Shipped',
+            is_paid=True,
+            razorpay_payment_id='pay_shipped_test',
+            original_cart_items=[{
+                'product_id': self.product.id,
+                'quantity': 1,
+                'selected_size': '',
+                'price': '5000.00'
+            }]
+        )
+
+        initial_stock = self.product.stock
+        request = MagicMock()
+        admin_obj.confirm_and_re_reserve_stock(request, Order.objects.filter(id=order.id))
+
+        order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(order.status, 'Shipped')
+        self.assertEqual(self.product.stock, initial_stock)
+
+    def test_admin_refund_rejects_shipped_order(self):
+        """Shipped orders must not be refunded and Razorpay API must not be called."""
+        site = AdminSite()
+        admin_obj = OrderAdmin(Order, site)
+
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Shipped',
+            is_paid=True,
+            razorpay_payment_id='pay_shipped_test'
+        )
+
+        request = MagicMock()
+        with patch('products.views.get_razorpay_client') as mock_client:
+            mock_inst = MagicMock()
+            mock_client.return_value = mock_inst
+
+            admin_obj.refund_via_razorpay(request, Order.objects.filter(id=order.id))
+
+            mock_inst.payment.refund.assert_not_called()
+            order.refresh_from_db()
+            self.assertEqual(order.status, 'Shipped')
+            self.assertIsNone(order.refund_id)
+
+    def test_late_capture_different_amount_leaves_total_amount_unchanged(self):
+        """Late capture with a different amount must not overwrite order.total_amount."""
+        order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("5000.00"),
+            status='Cancelled',
+            is_paid=False,
+            razorpay_order_id='order_diff_amt_123',
+            original_cart_items=[{
+                'cart_item_id': 105,
+                'product_id': self.product.id,
+                'quantity': 1,
+                'selected_size': '',
+                'price': '5000.00'
+            }]
+        )
+
+        payload = {
+            'event': 'payment.captured',
+            'payload': {
+                'payment': {
+                    'entity': {
+                        'id': 'pay_diff_amt_123',
+                        'order_id': 'order_diff_amt_123',
+                        'amount': 750000  # ₹7500.00 differs from ₹5000.00
+                    }
+                }
+            }
+        }
+
+        resp = self._post_webhook(payload)
+        self.assertEqual(resp.status_code, 200)
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'Payment Review')
+        self.assertEqual(order.total_amount, Decimal('5000.00'))
