@@ -1,3 +1,4 @@
+import logging
 import json
 import hmac
 import hashlib
@@ -28,6 +29,9 @@ from .models import (
 )
 from .otp_gateway import send_otp
 from . import session_cart as guest_cart
+from django.core.mail import send_mail
+
+logger = logging.getLogger(__name__)
 
 class GuestCartItem:
     def __init__(self, product, size, quantity, price):
@@ -115,7 +119,7 @@ def index(request):
     }
     return render(request, 'products/index.html', context)
 
-@ratelimit(key='ip', rate='30/m', method='GET')  # 30 requests per minute
+@ratelimit(key='ip', rate='30/m', method='GET', block=True)  # 30 requests per minute
 def shop(request):
     # Get page number from request
     page = request.GET.get('page', 1)
@@ -159,7 +163,7 @@ def about_view(request):
 def about_us(request):
     return render(request, 'products/about_us.html')
 
-@ratelimit(key='ip', rate='10/m', method='POST')  # Rate limit POST requests
+@ratelimit(key='ip', rate='10/m', method='POST', block=True)  # Rate limit POST requests
 def contact(request):
     if request.method == 'POST':
         full_name = request.POST.get('full_name')
@@ -173,6 +177,24 @@ def contact(request):
             subject=subject,
             message=message
         )
+        try:
+            admin_subject = f"[Rasayam Inquiry] {subject or 'New Customer Message'}"
+            admin_body = (
+                f"New Customer Concierge Inquiry:\n\n"
+                f"Name: {full_name}\n"
+                f"Email: {email}\n"
+                f"Subject: {subject}\n\n"
+                f"Message:\n{message}\n"
+            )
+            send_mail(
+                admin_subject,
+                admin_body,
+                settings.DEFAULT_FROM_EMAIL,
+                ['admin@rasayamglobal.com'],
+                fail_silently=True,
+            )
+        except Exception as exc:
+            logger.error("Failed to send contact notification: %s", exc)
         messages.success(
             request,
             "Your inquiry has been sent to the Rasayam concierge.",
@@ -301,7 +323,7 @@ def _issue_otp(profile: CustomerProfile) -> bool:
     return send_otp(profile.email, token.token)
 
 
-@ratelimit(key='ip', rate='5/m', method='POST')
+@ratelimit(key='ip', rate='5/m', method='POST', block=True)
 def register_view(request):
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
@@ -344,6 +366,15 @@ def register_view(request):
                 date_of_birth=dob if dob else None,
             )
 
+        # Cooldown guard: prevent spamming OTP emails
+        latest = profile.otp_tokens.first()
+        if latest:
+            elapsed = (timezone.now() - latest.created_at).total_seconds()
+            if elapsed < OTPToken.RESEND_COOLDOWN_SECONDS:
+                wait = int(OTPToken.RESEND_COOLDOWN_SECONDS - elapsed)
+                messages.info(request, f"A verification code was recently sent. Please wait {wait}s before requesting a new one.")
+                return redirect('verify_otp', email=email)
+
         success = _issue_otp(profile)
         if not success:
             messages.error(request, "Failed to send OTP. Please try again later.")
@@ -353,7 +384,7 @@ def register_view(request):
     return render(request, 'products/register.html')
 
 
-@ratelimit(key='ip', rate='5/m', method='POST')
+@ratelimit(key='ip', rate='5/m', method='POST', block=True)
 def login_view(request):
     if request.method == 'POST':
         email = request.POST.get('email', '').strip()
@@ -379,7 +410,7 @@ def login_view(request):
     return render(request, 'products/login.html')
 
 
-@ratelimit(key='ip', rate='10/m', method='POST')
+@ratelimit(key='ip', rate='10/m', method='POST', block=True)
 def verify_otp(request, email):
     profile = get_object_or_404(CustomerProfile, email=email.strip())
     otp_obj = profile.otp_tokens.filter(is_used=False).first()
@@ -423,7 +454,7 @@ def verify_otp(request, email):
 
 
 @require_POST
-@ratelimit(key='ip', rate='3/m', method='POST')
+@ratelimit(key='ip', rate='3/m', method='POST', block=True)
 def resend_otp(request, email):
     """Issues a new OTP, subject to a per-token cooldown to prevent spamming."""
     profile = get_object_or_404(CustomerProfile, email=email.strip())
@@ -542,7 +573,7 @@ def address_set_default(request, pk):
 # --- 4. Order & Cart Processing (with Razorpay) ---
 
 @login_required
-@ratelimit(key='user', rate='10/h', method='POST')
+@ratelimit(key='user', rate='10/h', method='POST', block=True)
 def save_order(request):
     """
     Converts the active cart into a pending order and opens a Razorpay payment session.
@@ -759,6 +790,7 @@ def payment_verify(request):
             order = Order.objects.get(razorpay_order_id=razorpay_order_id, user=request.user)
             order.razorpay_payment_id = payment_id
             order.razorpay_signature = signature
+            order.transaction_id = payment_id
             order.is_paid = True
             order.status = 'Paid'
             order.save()
@@ -840,6 +872,9 @@ def razorpay_webhook(request):
             order.razorpay_payment_id = payment_id
             order.transaction_id = payment_id  # populate unique transaction_id
             order.save(update_fields=['is_paid', 'status', 'razorpay_payment_id', 'transaction_id'])
+            cart = Cart.objects.filter(user=order.user).first()
+            if cart:
+                clear_paid_cart_items(cart, order)
     except (Order.DoesNotExist, KeyError):
         # Return 200 so Razorpay doesn't keep retrying for unknown orders
         return JsonResponse({'status': 'order_not_found'})
@@ -914,7 +949,7 @@ def remove_from_cart(request, item_id):
     return redirect('cart')
 
 
-@ratelimit(key='ip', rate='30/m', method='POST')  # Prevent spam adds (use IP to include guests)
+@ratelimit(key='ip', rate='30/m', method='POST', block=True)  # Prevent spam adds (use IP to include guests)
 def add_to_cart_ajax(request, product_id):
     product = get_object_or_404(Product, id=product_id)
     if product.stock <= 0:
@@ -1090,6 +1125,7 @@ def terms(request): return render(request, 'products/terms.html')
 
 # --- Delhivery Shipping Integration ---
 
+@ratelimit(key='ip', rate='30/m', method='GET', block=True)
 def track_order(request):
     """
     Public tracking page: accepts waybill number or order ID (e.g. RASAYAM-42).
@@ -1111,10 +1147,27 @@ def track_order(request):
             order_id = int(order_id_match.group(1))
             try:
                 order_obj = Order.objects.get(id=order_id)
-                if order_obj.delhivery_waybill:
+                # Customer privacy check: prevent sequential ID enumeration
+                is_authorized = (request.user.is_authenticated and order_obj.user == request.user)
+                verify_val = request.GET.get('verify', '').strip().lower()
+                if not is_authorized and verify_val:
+                    order_email = (order_obj.user.email or '').lower().strip()
+                    profile_phone = getattr(getattr(order_obj.user, 'customerprofile', None), 'phone', '') or ''
+                    clean_verify = re.sub(r'[\s\-+]', '', verify_val)
+                    clean_phone = re.sub(r'[\s\-+]', '', profile_phone)
+                    if (verify_val == order_email) or (clean_phone and clean_verify in clean_phone) or (clean_verify in order_obj.shipping_address):
+                        is_authorized = True
+
+                if not is_authorized:
+                    tracking = {
+                        'success': False,
+                        'need_verification': True,
+                        'order_id': order_id,
+                        'error': f'For customer security, please enter the phone number or email registered with Order #{order_id} to view tracking details.',
+                    }
+                elif order_obj.delhivery_waybill:
                     waybill = order_obj.delhivery_waybill
                 else:
-                    # No waybill yet — show a pending message
                     tracking = {
                         'success': False,
                         'error': f'Order #{order_id} has not been shipped yet. Please check back later.',
@@ -1141,6 +1194,7 @@ def track_order(request):
     })
 
 
+@ratelimit(key='ip', rate='30/m', method='GET', block=True)
 def pincode_check_api(request):
     """
     GET /api/pincode-check/?pincode=110001
@@ -1214,7 +1268,7 @@ def collections_view(request):
     user_collections = request.user.wishlists.prefetch_related('items__product').order_by('-created_at')
     return render(request, 'products/collections.html', {'collections': user_collections})
 
-@ratelimit(key='ip', rate='60/m', method='GET')  # Rate limit search requests
+@ratelimit(key='ip', rate='60/m', method='GET', block=True)  # Rate limit search requests
 def search_view(request):
     query = request.GET.get('q', '').strip()
     results = []

@@ -61,13 +61,17 @@ CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = env_bool('USE_X_FORWARDED_HOST', default=not DEBUG)
 SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', default=not DEBUG)
-SECURE_REDIRECT_EXEMPT = env_list('SECURE_REDIRECT_EXEMPT', default=[r'^health/$'])
+SECURE_REDIRECT_EXEMPT = env_list('SECURE_REDIRECT_EXEMPT', default=[r'^health/$', r'^robots\.txt$', r'^sitemap\.xml$'])
 SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', default=not DEBUG)
 CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', default=not DEBUG)
-SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))
-SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False)
-SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', default=False)
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000' if not DEBUG else '0'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=not DEBUG)
+SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', default=not DEBUG)
 X_FRAME_OPTIONS = os.getenv('X_FRAME_OPTIONS', 'DENY')
+SECURE_CONTENT_TYPE_NOSNIFF = True
 
 
 # Application definition
@@ -83,6 +87,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sitemaps',
 
     'cloudinary_storage',
     'cloudinary',
@@ -105,15 +110,14 @@ _MIDDLEWARE_BASE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# Resolved below after S3 config is determined.
-MIDDLEWARE = _MIDDLEWARE_BASE
+MIDDLEWARE = list(_MIDDLEWARE_BASE)
 
 ROOT_URLCONF = 'Rasayam_website.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'], # Global templates folder
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -121,9 +125,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                
-                # --- Rasayam Custom Processors ---
-                'products.context_processors.cart_count', 
+                'products.context_processors.cart_count',
             ],
         },
     },
@@ -139,96 +141,67 @@ WSGI_APPLICATION = 'Rasayam_website.wsgi.application'
 if os.getenv('DATABASE_URL'):
     DATABASES = {
         'default': dj_database_url.config(
+            default=os.getenv('DATABASE_URL'),
             conn_max_age=600,
             conn_health_checks=True,
         )
     }
-elif os.getenv('DB_NAME') and os.getenv('DB_USER'):
+# Fall back to separate DB_* variables (useful for local Postgres or Docker Compose)
+elif os.getenv('DB_NAME'):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': os.getenv('DB_NAME'),
-            'USER': os.getenv('DB_USER'),
+            'USER': os.getenv('DB_USER', 'postgres'),
             'PASSWORD': os.getenv('DB_PASSWORD', ''),
-            'HOST': os.getenv('DB_HOST', '127.0.0.1'),
+            'HOST': os.getenv('DB_HOST', 'localhost'),
             'PORT': os.getenv('DB_PORT', '5432'),
-            # Connection pooling for high-traffic scenarios
-            'CONN_MAX_AGE': 600,  # Keep connections alive for 10 minutes
-            'OPTIONS': {
-                'connect_timeout': 10,
-                'statement_timeout': 30000,  # 30 seconds
-            }
+            'CONN_MAX_AGE': 600,
+            'CONN_HEALTH_CHECKS': True,
         }
     }
-else:
-    if (
-        not DEBUG
-        and STRICT_PRODUCTION_ENV
-        and not env_bool('ALLOW_SQLITE_IN_PRODUCTION', default=False)
-    ):
-        raise ValueError('Production requires DATABASE_URL or DB_NAME/DB_USER/DB_HOST for AWS RDS.')
-
+# Fallback to local SQLite only when DEBUG is enabled
+elif DEBUG:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+else:
+    raise ValueError(
+        'Production requires either DATABASE_URL or DB_NAME to be configured. '
+        'SQLite is not permitted in production.'
+    )
+
 
 # ==========================================
-# CACHING CONFIGURATION (High Traffic Optimization)
+# CACHE CONFIGURATION
 # ==========================================
-# Production uses Redis; Development uses local memory cache
-if not DEBUG and os.getenv('REDIS_URL'):
-    # Production: Use Redis for distributed caching
+REDIS_URL = os.getenv('REDIS_URL')
+if REDIS_URL:
     CACHES = {
         'default': {
-            'BACKEND': 'django_redis.cache.RedisCache',
-            'LOCATION': os.getenv('REDIS_URL'),
-            'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-                'CONNECTION_POOL_KWARGS': {
-                    'max_connections': 50,
-                    'retry_on_timeout': True,
-                },
-                'SOCKET_CONNECT_TIMEOUT': 5,
-                'SOCKET_TIMEOUT': 5,
-                'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
-            }
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+            'TIMEOUT': 300,
+            'KEY_PREFIX': 'rasayam',
         }
     }
+elif not DEBUG and STRICT_PRODUCTION_ENV:
+    raise ValueError('Production requires REDIS_URL for cache and session storage.')
 else:
-    # Development: Use local memory cache
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'rasayam-cache',
-            'TIMEOUT': 300,  # 5 minutes default cache timeout
-            'OPTIONS': {
-                'MAX_ENTRIES': 10000,
-            }
+            'LOCATION': 'rasayam-local-cache',
+            'TIMEOUT': 300,
         }
     }
 
-# Cache middleware settings for automatic page caching
-CACHE_MIDDLEWARE_ALIAS = 'default'
-CACHE_MIDDLEWARE_SECONDS = int(os.getenv('CACHE_MIDDLEWARE_SECONDS', '300'))  # 5 minutes
-
 # ==========================================
-# QUERY OPTIMIZATION SETTINGS
+# PASSWORD VALIDATION
 # ==========================================
-# Enable persistent database connections
-ATOMIC_REQUESTS = False  # Avoid unnecessary transaction overhead
-
-# Query result caching
-if not DEBUG:
-    # Log slow queries in production (> 1000ms)
-    SLOW_QUERY_THRESHOLD = int(os.getenv('SLOW_QUERY_THRESHOLD', '1000'))
-else:
-    SLOW_QUERY_THRESHOLD = int(os.getenv('SLOW_QUERY_THRESHOLD', '100'))
-
-
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -244,9 +217,12 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Internationalization
+
+# ==========================================
+# INTERNATIONALIZATION
+# ==========================================
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
 USE_TZ = True
 
@@ -467,8 +443,6 @@ if not DEBUG and STRICT_PRODUCTION_ENV:
     if missing_production_env:
         raise ValueError(f"Production requires: {', '.join(missing_production_env)}")
 
-# Additional validation for Razorpay keys in all production environments
-# (Solved by Claude: Added startup validation to catch missing payment gateway credentials early)
 if not DEBUG and not RAZORPAY_KEY_ID:
     import warnings
     warnings.warn("WARNING: RAZORPAY_KEY_ID is not set. Payment verification will fail in production.", RuntimeWarning)
@@ -488,7 +462,7 @@ if os.getenv('EMAIL_HOST'):
     EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', default=True)
     EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-    DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Rasayam <no-reply@rasayam.com>')
+    DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Rasayam <no-reply@rasayamglobal.com>')
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
     DEFAULT_FROM_EMAIL = 'Rasayam Local <no-reply@localhost>'
@@ -498,4 +472,3 @@ else:
 # ==========================================
 DELHIVERY_API_TOKEN = os.getenv('DELHIVERY_API_TOKEN', '')
 DELHIVERY_BASE_URL = os.getenv('DELHIVERY_BASE_URL', 'https://track.delhivery.com')
-

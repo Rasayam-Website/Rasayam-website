@@ -67,13 +67,13 @@ DEBUG=True
 SECRET_KEY='django-insecure-local-development-only-change-in-production'
 
 # Razorpay credentials (Test Keys)
-RAZORPAY_KEY_ID='rzp_test_SjPurGf3j2o6YC'
-RAZORPAY_KEY_SECRET='6OKuYuLYp9vsPJo0ie2405n3'
+RAZORPAY_KEY_ID='your_razorpay_key_id'
+RAZORPAY_KEY_SECRET='your_razorpay_key_secret'
 
 # Cloudinary media bucket fallback (optional)
-CLOUDINARY_CLOUD_NAME=drg4vbsm0
-CLOUDINARY_API_KEY=762895656888373
-CLOUDINARY_API_SECRET=inXeYDGYkDgFV7_Ox1QBy_w_zEM
+CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+CLOUDINARY_API_KEY=your_cloudinary_api_key
+CLOUDINARY_API_SECRET=your_cloudinary_api_secret
 ```
 
 ---
@@ -85,27 +85,27 @@ Ensure you have activated your virtual environment before executing these comman
 ### 1. Run Database Migrations
 Apply the migrations to initialize your local database:
 ```bash
-python manage.py migrate
+py manage.py migrate
 ```
 
 ### 2. Create the Admin User
 Initialize the default superuser credentials:
 ```bash
-python create_admin.py
+DJANGO_SUPERUSER_PASSWORD='YourSecurePassword' py create_admin.py
 ```
 * **Default Username**: `admin`
-* **Default Password**: `Rasayam@Admin123`
+* **Default Password**: `YourSecurePasswordHere`
 
 ### 3. Collect Static Files
 Gather all static resources for the web application:
 ```bash
-python manage.py collectstatic --noinput
+py manage.py collectstatic --noinput
 ```
 
 ### 4. Launch the Development Server
 Start the Django development server:
 ```bash
-python manage.py runserver
+py manage.py runserver
 ```
 Visit the application at `http://127.0.0.1:8000/`.
 
@@ -124,13 +124,13 @@ Access the Unfold-themed administrative dashboard at:
 ### Run System Check
 Validate settings and code integrity:
 ```bash
-python manage.py check
+py manage.py check
 ```
 
 ### Execute Tests
 Run the project's automated test suite:
 ```bash
-python manage.py test
+py manage.py test
 ```
 
 ### Run Environment Diagnostics

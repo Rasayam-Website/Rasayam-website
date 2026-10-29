@@ -158,7 +158,7 @@ class Product(models.Model):
     
     # Size selection
     sizes = models.ManyToManyField(Size, blank=True, help_text="Hold Ctrl to select multiple sizes.")
-    stock = models.PositiveIntegerField(default=0, help_text="Available units. 0 = out of stock.")
+    stock = models.PositiveIntegerField(default=0, db_index=True, help_text="Available units. 0 = out of stock.")
 
     def __str__(self):
         return self.name
@@ -203,7 +203,7 @@ class Order(models.Model):
     ]
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
     created_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending', db_index=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     original_cart_items = models.JSONField(default=list, blank=True)
     shipping_address = models.TextField(blank=True, default='')
@@ -217,7 +217,7 @@ class Order(models.Model):
     is_paid = models.BooleanField(default=False)
 
     # --- DELHIVERY SHIPPING FIELDS ---
-    delhivery_waybill = models.CharField('Delhivery Waybill', max_length=100, blank=True, null=True,
+    delhivery_waybill = models.CharField('Delhivery Waybill', max_length=100, blank=True, null=True, db_index=True,
                                          help_text='Waybill number assigned by Delhivery')
     delhivery_shipment_status = models.CharField('Shipment Status', max_length=100, blank=True, default='',
                                                   help_text='Last known Delhivery tracking status')

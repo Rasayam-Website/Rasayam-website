@@ -229,11 +229,18 @@
                 {% endif %}
             </div>
             {% else %}
-            <!-- Error -->
+            <!-- Error or Verification -->
             <div class="tracking-error">
                 <div class="icon">📦</div>
-                <h3>Shipment Not Found</h3>
+                <h3>{% if tracking.need_verification %}Verification Required{% else %}Shipment Status Notice{% endif %}</h3>
                 <p>{{ tracking.error|default:"We couldn't find a shipment matching your query. Please double-check your waybill number or order ID." }}</p>
+                {% if tracking.need_verification %}
+                <form action="{% url 'track_order' %}" method="GET" style="margin-top: 24px; display: flex; gap: 12px; justify-content: center; max-width: 480px; margin-left: auto; margin-right: auto; flex-wrap: wrap;">
+                    <input type="hidden" name="q" value="{{ query }}">
+                    <input type="text" name="verify" placeholder="Enter Phone or Email" required style="flex: 1; min-width: 200px; padding: 14px 18px; border: 1.5px solid #d4af37; border-radius: 4px; font-size: 0.9rem; font-family: inherit;">
+                    <button type="submit" style="padding: 14px 28px; background: #1a1a1a; color: #fff; border: none; border-radius: 4px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; font-size: 0.75rem; cursor: pointer;">Verify</button>
+                </form>
+                {% endif %}
             </div>
             {% endif %}
 

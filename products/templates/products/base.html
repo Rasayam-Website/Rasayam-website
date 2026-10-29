@@ -5,6 +5,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}RASAYAM | Luxury Ethnic Wear{% endblock %}</title>
+    <meta name="description" content="Discover RASAYAM - Luxury handcrafted ethnic wear, festive collections, and artisanal ensembles designed for timeless elegance.">
+    <link rel="canonical" href="{{ request.build_absolute_uri }}">
+    <meta property="og:site_name" content="RASAYAM">
+    <meta property="og:title" content="{% block og_title %}RASAYAM | Luxury Ethnic Wear{% endblock %}">
+    <meta property="og:description" content="Handcrafted ethnic wear and luxury fashion celebrating timeless Indian heritage.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.build_absolute_uri }}">
+    <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'products/image/hero-bg.png' %}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{% block twitter_title %}RASAYAM | Luxury Ethnic Wear{% endblock %}">
+    <meta name="twitter:description" content="Handcrafted ethnic wear and luxury fashion celebrating timeless Indian heritage.">
     
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
@@ -26,7 +37,7 @@
         @media (max-width: 768px) {
             html,
             body {
-                max-width: 100vw;
+                max-width: 100%;
                 overflow-x: hidden;
             }
 
@@ -48,7 +59,7 @@
 </head>
 <body>
     {% if messages %}
-    <div class="messages-container" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px;">
+    <div class="messages-container" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10001; width: 90%; max-width: 400px;">
         {% for message in messages %}
         <div class="message {{ message.tags }}" style="padding: 15px; margin-bottom: 10px; border-radius: 4px; background: #333; color: white; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
             {{ message }}
@@ -103,7 +114,7 @@
                 <ul class="nav-links">
                     <li><a href="{% url 'index' %}" style="text-decoration: none; color: #1a1a1a; font-size: 0.8rem; letter-spacing: 1px;">HOME</a></li>
                     <li><a href="{% url 'shop' %}" style="text-decoration: none; color: #1a1a1a; font-size: 0.8rem; letter-spacing: 1px;">SHOP</a></li>
-                    <li><a href="{% url 'about' %}" style="text-decoration: none; color: #1a1a1a; font-size: 0.8rem; letter-spacing: 1px;">ABOUT</a></li>
+                    <li><a href="{% url 'about_us' %}" style="text-decoration: none; color: #1a1a1a; font-size: 0.8rem; letter-spacing: 1px;">ABOUT</a></li>
                     <li><a href="{% url 'contact' %}" style="text-decoration: none; color: #1a1a1a; font-size: 0.8rem; letter-spacing: 1px;">CONTACT</a></li>
                     <li><a href="{% url 'track_order' %}" style="text-decoration: none; color: #1a1a1a; font-size: 0.8rem; letter-spacing: 1px;">TRACK</a></li>
                 </ul>
@@ -202,7 +213,7 @@
                 <ul class="mobile-nav-links">
                     <li><a href="{% url 'index' %}">HOME</a></li>
                     <li><a href="{% url 'shop' %}">SHOP</a></li>
-                    <li><a href="{% url 'about' %}">ABOUT</a></li>
+                    <li><a href="{% url 'about_us' %}">ABOUT</a></li>
                     <li><a href="{% url 'contact' %}">CONTACT</a></li>
                     <li><a href="{% url 'track_order' %}">TRACK ORDER</a></li>
                 </ul>
@@ -240,7 +251,7 @@
                     <p><strong>Reach Out To Us</strong></p>
                     <p>+91 8923061123</p>
                     <p>admin@rasayamglobal.com</p>
-                    <p>Sai Poorna Appartment, Dushyant Nagar, Paschimpuri Road, Agra 282007</p>
+                    <p>Sai Poorna Apartment, Dushyant Nagar, Paschimpuri Road, Agra 282007</p>
                     <p><strong>GSTIN:</strong> 09ALXPA4766B2ZV</p>
                 </div>
             </div>
