@@ -12,7 +12,13 @@
     <meta property="og:description" content="Handcrafted ethnic wear and luxury fashion celebrating timeless Indian heritage.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ request.build_absolute_uri }}">
-    <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'products/image/hero-bg.png' %}">
+    <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'products/image/rasayam-face-cover.jpg' %}">
+    <meta name="twitter:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'products/image/rasayam-face-cover.jpg' %}">
+    
+    <link rel="icon" type="image/x-icon" href="{% static 'products/image/favicon.ico' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'products/image/favicon.png' %}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{% static 'products/image/favicon-192.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'products/image/apple-touch-icon.png' %}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{% block twitter_title %}RASAYAM | Luxury Ethnic Wear{% endblock %}">
     <meta name="twitter:description" content="Handcrafted ethnic wear and luxury fashion celebrating timeless Indian heritage.">
@@ -89,7 +95,10 @@
             <!-- EXTREME LEFT: Logo & Profile -->
             <div class="nav-left">
                 <div class="logo">
-                    <a href="{% url 'index' %}" style="text-decoration: none; color: inherit; font-weight: 700; letter-spacing: 2px;">RASAYAM</a>
+                    <a href="{% url 'index' %}" style="text-decoration: none; color: inherit; font-weight: 700; letter-spacing: 2px; display: inline-flex; align-items: center; gap: 8px;">
+                        <img src="{% static 'products/image/brand-sun.png' %}" alt="RASAYAM Emblem" style="height: 22px; width: auto; vertical-align: middle;">
+                        <span>RASAYAM</span>
+                    </a>
                 </div>
                 
                 <div class="nav-divider"></div>
@@ -163,7 +172,10 @@
                     <span></span>
                 </label>
 
-                <a href="{% url 'index' %}" class="mobile-logo">RASAYAM</a>
+                <a href="{% url 'index' %}" class="mobile-logo" style="display: inline-flex; align-items: center; gap: 6px;">
+                    <img src="{% static 'products/image/brand-sun.png' %}" alt="RASAYAM" style="height: 18px; width: auto; vertical-align: middle;">
+                    <span>RASAYAM</span>
+                </a>
 
                 <div class="mobile-actions">
                     <a href="{% url 'shop' %}" class="mobile-shop-link">Shop</a>
@@ -246,7 +258,10 @@
     <footer class="main-footer">
         <div class="container footer-top"> <!-- Removed inline flex styles here -->
             <div class="footer-col">
-                <h2 class="footer-logo">RASAYAM</h2>
+                <div style="display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px;">
+                    <img src="{% static 'products/image/brand-sun.png' %}" alt="RASAYAM" style="height: 24px; width: auto; vertical-align: middle;">
+                    <h2 class="footer-logo" style="margin: 0; display: inline-block;">RASAYAM</h2>
+                </div>
                 <div class="contact-info">
                     <p><strong>Reach Out To Us</strong></p>
                     <p>+91 8923061123</p>
