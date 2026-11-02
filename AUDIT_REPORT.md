@@ -20,18 +20,18 @@ A comprehensive, end-to-end production audit was conducted evaluating the live p
 * **Superuser Password Committed to Git:**
   - **Location:** `create_admin.py:10`, `create_admin.py:14`, `create_admin.py:20-21`
   - **Commit History:** Commits `ccbbd00` and `d9bd0a0` ("Force admin password reset on startup")
-  - **Exposed Secret:** Superuser username `admin` with hardcoded password `Rasayam@Admin123`.
+  - **Exposed Secret:** Superuser username `admin` with hardcoded password `[REDACTED_PASSWORD]`.
   - **Impact:** Anyone with read access to the GitHub repository can log into the production Django Admin (`https://rasayamglobal.com/admin/`) with full superuser privileges to access all customer PII, order histories, database records, and server settings.
 * **Third-Party API Credentials in Public README:**
   - **Location:** `README.md:70-76`
   - **Commit History:** Commit `4ce6cb3`
   - **Exposed Credentials:**
     ```ini
-    RAZORPAY_KEY_ID='rzp_test_SjPurGf3j2o6YC'
-    RAZORPAY_KEY_SECRET='6OKuYuLYp9vsPJo0ie2405n3'
-    CLOUDINARY_CLOUD_NAME=drg4vbsm0
-    CLOUDINARY_API_KEY=762895656888373
-    CLOUDINARY_API_SECRET=inXeYDGYkDgFV7_Ox1QBy_w_zEM
+    RAZORPAY_KEY_ID='[REDACTED_KEY_ID]'
+    RAZORPAY_KEY_SECRET='[REDACTED_KEY_SECRET]'
+    CLOUDINARY_CLOUD_NAME=[REDACTED_CLOUD_NAME]
+    CLOUDINARY_API_KEY=[REDACTED_API_KEY]
+    CLOUDINARY_API_SECRET=[REDACTED_API_SECRET]
     ```
   - **Impact:** Live Cloudinary media storage bucket API keys and Razorpay test credentials committed directly in documentation.
 
