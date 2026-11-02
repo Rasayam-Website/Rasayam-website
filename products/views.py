@@ -13,7 +13,8 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
-from django.views.decorators.cache import cache_page, never_cache
+import zlib
+from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.utils import timezone
@@ -42,7 +43,6 @@ class GuestCartItem:
 
     @property
     def id(self):
-        import zlib
         return zlib.crc32(f"{self.product.id}:{self.selected_size}".encode('utf-8')) & 0x7fffffff
 
     @property
@@ -54,7 +54,6 @@ class GuestCartItem:
         return self.unit_price * self.quantity
 
 def find_guest_item_by_pseudo_id(session, item_id):
-    import zlib
     for item in guest_cart.get_items(session):
         pid = item['product_id']
         size = item['size']
@@ -138,7 +137,6 @@ def shop(request):
         items = paginator.page(paginator.num_pages)
     
     categories = Category.objects.all().order_by('order')
-    promos = PromoBox.objects.all().order_by('order')[:4]
     
     cart_product_ids = []
     if request.user.is_authenticated:
@@ -148,7 +146,6 @@ def shop(request):
     return render(request, 'products/shop.html', {
         'items': items, 
         'categories': categories, 
-        'promos': promos,
         'cart_product_ids': cart_product_ids,
         'paginator': paginator,
     })
@@ -228,12 +225,12 @@ def cart(request):
                 ))
         total_price = sum(item.total_item_price for item in cart_items)
 
-    # Show in-stock recommendations (prefer items with categories if available, else all in-stock)
-    recommended_items = Product.objects.filter(stock__gt=0).exclude(category__isnull=True).select_related('category').order_by('?')[:4]
-    if not recommended_items.exists():
-        recommended_items = Product.objects.filter(stock__gt=0).order_by('?')[:4]
-    if not recommended_items.exists():
-        recommended_items = Product.objects.all().order_by('?')[:4]
+    # Show in-stock recommendations
+    recommended_items = (
+        Product.objects.filter(stock__gt=0)
+        .select_related('category')
+        .order_by('-id')[:4]
+    )
     
     context = {
         'cart_items': cart_items,
@@ -266,20 +263,17 @@ def category_detail(request, slug):
         'paginator': paginator,
     })
 
-def product_detail_view(request, pk):
-    """Product Detail with Gallery and Sizes - Optimized query"""
-    # Use select_related and prefetch_related for optimal performance
+def product_detail_view(request, pk=None, slug=None):
+    """Product Detail with Gallery and Sizes - Optimized query (handles pk or slug)"""
+    lookup = {'pk': pk} if pk is not None else {'slug': slug}
     product = get_object_or_404(
         Product.objects.select_related('category').prefetch_related(
             'gallery_images',
             'sizes',
         ),
-        pk=pk
+        **lookup
     )
-    # Get recent reviews separately without slicing in prefetch
     reviews = product.reviews.select_related('user').order_by('-created_at')[:10]
-    
-    # Process highlights for list display
     highlights_list = product.highlights.split('\n') if product.highlights else []
 
     return render(request, 'products/product_detail.html', {
@@ -288,27 +282,7 @@ def product_detail_view(request, pk):
         'highlights_list': highlights_list
     })
 
-def product_detail_view_slug(request, slug):
-    """Product Detail by Slug (SEO-friendly URL) - Optimized query"""
-    # Use select_related and prefetch_related for optimal performance
-    product = get_object_or_404(
-        Product.objects.select_related('category').prefetch_related(
-            'gallery_images',
-            'sizes',
-        ),
-        slug=slug
-    )
-    # Get recent reviews separately without slicing in prefetch
-    reviews = product.reviews.select_related('user').order_by('-created_at')[:10]
-    
-    # Process highlights for list display
-    highlights_list = product.highlights.split('\n') if product.highlights else []
-
-    return render(request, 'products/product_detail.html', {
-        'product': product,
-        'reviews': reviews,
-        'highlights_list': highlights_list
-    })
+product_detail_view_slug = product_detail_view
 
 # --- 3. Authentication Views ---
 
@@ -475,11 +449,6 @@ def resend_otp(request, email):
     return redirect('verify_otp', email=email)
 
 
-def logout_view(request):
-    logout(request)
-    request.session.flush()
-    return redirect('index')
-
 @login_required
 def profile_view(request):
     # We only want to show orders that were successfully completed
@@ -508,40 +477,26 @@ def address_list(request):
     addresses = Address.objects.filter(user=request.user, is_active=True)
     return render(request, 'products/addresses.html', {'addresses': addresses})
 
+def _extract_address_post(post):
+    fields = ('full_name', 'phone_number', 'pincode', 'address_line1', 'address_line2', 'landmark', 'city', 'state')
+    data = {k: post.get(k, '').strip() for k in fields}
+    data['address_type'] = post.get('address_type', 'HOME')
+    data['is_default'] = post.get('is_default') == 'on'
+    return data
+
 @login_required
 def address_create(request):
     if request.method == 'POST':
-        Address.objects.create(
-            user=request.user,
-            full_name=request.POST.get('full_name', '').strip(),
-            phone_number=request.POST.get('phone_number', '').strip(),
-            pincode=request.POST.get('pincode', '').strip(),
-            address_line1=request.POST.get('address_line1', '').strip(),
-            address_line2=request.POST.get('address_line2', '').strip(),
-            landmark=request.POST.get('landmark', '').strip(),
-            city=request.POST.get('city', '').strip(),
-            state=request.POST.get('state', '').strip(),
-            address_type=request.POST.get('address_type', 'HOME'),
-            is_default=request.POST.get('is_default') == 'on',
-        )
+        Address.objects.create(user=request.user, **_extract_address_post(request.POST))
         messages.success(request, 'Address saved successfully.')
-        return redirect(request.POST.get('next') or 'address_list')
-    return redirect('address_list')
+    return redirect(request.POST.get('next') or 'address_list')
 
 @login_required
 def address_edit(request, pk):
     address = get_object_or_404(Address, pk=pk, user=request.user, is_active=True)
     if request.method == 'POST':
-        address.full_name = request.POST.get('full_name', '').strip()
-        address.phone_number = request.POST.get('phone_number', '').strip()
-        address.pincode = request.POST.get('pincode', '').strip()
-        address.address_line1 = request.POST.get('address_line1', '').strip()
-        address.address_line2 = request.POST.get('address_line2', '').strip()
-        address.landmark = request.POST.get('landmark', '').strip()
-        address.city = request.POST.get('city', '').strip()
-        address.state = request.POST.get('state', '').strip()
-        address.address_type = request.POST.get('address_type', 'HOME')
-        address.is_default = request.POST.get('is_default') == 'on'
+        for field, value in _extract_address_post(request.POST).items():
+            setattr(address, field, value)
         address.save()
         messages.success(request, 'Address updated.')
         return redirect(request.POST.get('next') or 'address_list')
@@ -957,12 +912,12 @@ def add_to_cart(request, product_id):
     return redirect(request.META.get('HTTP_REFERER', 'shop'))
 
 
-def decrease_cart_item(request, item_id):
+def _handle_cart_item_removal(request, item_id, decrement=False):
     if request.user.is_authenticated:
         cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
-        if cart_item.quantity > 1:
+        if decrement and cart_item.quantity > 1:
             cart_item.quantity -= 1
-            cart_item.save()
+            cart_item.save(update_fields=['quantity'])
             messages.info(request, "Item quantity updated.")
         else:
             cart_item.delete()
@@ -971,7 +926,7 @@ def decrease_cart_item(request, item_id):
         found = find_guest_item_by_pseudo_id(request.session, item_id)
         if found:
             pid, size, item = found
-            new_qty = item['quantity'] - 1
+            new_qty = item['quantity'] - 1 if decrement else 0
             if new_qty > 0:
                 guest_cart.update_item(request.session, pid, size, new_qty)
                 messages.info(request, "Item quantity updated.")
@@ -980,22 +935,15 @@ def decrease_cart_item(request, item_id):
                 messages.info(request, "Item removed.")
         else:
             messages.error(request, "Item not found in your bag.")
+
+
+def decrease_cart_item(request, item_id):
+    _handle_cart_item_removal(request, item_id, decrement=True)
     return redirect('cart')
 
 
 def remove_from_cart(request, item_id):
-    if request.user.is_authenticated:
-        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
-        cart_item.delete()
-        messages.info(request, "Item removed.")
-    else:
-        found = find_guest_item_by_pseudo_id(request.session, item_id)
-        if found:
-            pid, size, _ = found
-            guest_cart.remove_item(request.session, pid, size)
-            messages.info(request, "Item removed.")
-        else:
-            messages.error(request, "Item not found in your bag.")
+    _handle_cart_item_removal(request, item_id, decrement=False)
     return redirect('cart')
 
 
@@ -1026,119 +974,6 @@ def add_to_cart_ajax(request, product_id):
     })
 
 
-def cart_detail_api(request):
-    """GET /api/cart/ — full cart state as JSON for frontend re-renders."""
-    if request.user.is_authenticated:
-        cart, _ = Cart.objects.get_or_create(user=request.user)
-        items = []
-        for item in cart.items.select_related('product'):
-            items.append({
-                'id': item.id,
-                'product_id': item.product_id,
-                'product_name': item.product.name,
-                'selected_size': item.selected_size,
-                'quantity': item.quantity,
-                'unit_price': str(item.unit_price),
-                'total_price': str(item.total_item_price),
-                'image_url': item.product.image.url if item.product.image else '',
-            })
-        total_price = cart.total_price
-    else:
-        session_items = guest_cart.get_items(request.session)
-        product_ids = [item['product_id'] for item in session_items]
-        products = {p.id: p for p in Product.objects.filter(id__in=product_ids)}
-        items = []
-        import zlib
-        for item in session_items:
-            prod = products.get(item['product_id'])
-            if prod:
-                unit_price = Decimal(item['price'])
-                qty = item['quantity']
-                pseudo_id = zlib.crc32(f"{prod.id}:{item['size']}".encode('utf-8')) & 0x7fffffff
-                items.append({
-                    'id': pseudo_id,
-                    'product_id': prod.id,
-                    'product_name': prod.name,
-                    'selected_size': item['size'],
-                    'quantity': qty,
-                    'unit_price': str(unit_price),
-                    'total_price': str(unit_price * qty),
-                    'image_url': prod.image.url if prod.image else '',
-                })
-        total_price = guest_cart.total(request.session)
-
-    return JsonResponse({
-        'items': items,
-        'total': str(total_price),
-        'count': sum(i['quantity'] for i in items),
-    })
-
-
-def update_cart_item(request, item_id):
-    """POST /api/cart/update/<id>/ — body: {quantity: int}. 0 removes the item."""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
-
-    try:
-        data = json.loads(request.body)
-        quantity = int(data.get('quantity', 1))
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'error': 'Invalid payload'}, status=400)
-
-    if request.user.is_authenticated:
-        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
-        if quantity <= 0:
-            cart_item.delete()
-        else:
-            cart_item.quantity = quantity
-            cart_item.save(update_fields=['quantity'])
-        cart = Cart.objects.get(user=request.user)
-        total_price = cart.total_price
-        total_count = sum(i.quantity for i in cart.items.all())
-    else:
-        found = find_guest_item_by_pseudo_id(request.session, item_id)
-        if found:
-            pid, size, _ = found
-            if quantity <= 0:
-                guest_cart.remove_item(request.session, pid, size)
-            else:
-                guest_cart.update_item(request.session, pid, size, quantity)
-        total_price = guest_cart.total(request.session)
-        total_count = sum(item['quantity'] for item in guest_cart.get_items(request.session))
-
-    return JsonResponse({
-        'status': 'ok',
-        'cart_total': str(total_price),
-        'cart_count': total_count,
-    })
-
-
-def remove_cart_item_api(request, item_id):
-    """DELETE /api/cart/remove/<id>/"""
-    if request.method not in ('POST', 'DELETE'):
-        return JsonResponse({'error': 'POST or DELETE required'}, status=405)
-
-    if request.user.is_authenticated:
-        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
-        cart_item.delete()
-        cart = Cart.objects.get(user=request.user)
-        total_price = cart.total_price
-        total_count = sum(i.quantity for i in cart.items.all())
-    else:
-        found = find_guest_item_by_pseudo_id(request.session, item_id)
-        if found:
-            pid, size, _ = found
-            guest_cart.remove_item(request.session, pid, size)
-        total_price = guest_cart.total(request.session)
-        total_count = sum(item['quantity'] for item in guest_cart.get_items(request.session))
-
-    return JsonResponse({
-        'status': 'ok',
-        'cart_total': str(total_price),
-        'cart_count': total_count,
-    })
-
-@login_required
 def payment_success(request, order_id):
     """
     Renders the success page after a confirmed transaction.
@@ -1166,9 +1001,9 @@ def payment_fail(request):
 
 # --- Policy Pages ---
 def privacy(request): return render(request, 'products/privacy_policy.html')
-def refund(request): return render(request, 'products/refund.html')
+def refund(request): return redirect('refund_policy', permanent=True)
 def refund_policy(request): return render(request, 'products/refund_policy.html')
-def shipping(request): return render(request, 'products/shipping.html')
+def shipping(request): return redirect('shipping_policy', permanent=True)
 def shipping_policy(request): return render(request, 'products/shipping_policy.html')
 def terms(request): return render(request, 'products/terms.html')
 

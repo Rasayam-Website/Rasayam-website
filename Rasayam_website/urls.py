@@ -81,8 +81,8 @@ def robots_txt(request):
 
 
 def favicon_ico(request):
-    # Return 204 No Content so browsers and bots stop generating 404 error logs
-    return HttpResponse(status=204)
+    from django.shortcuts import redirect
+    return redirect(settings.STATIC_URL + 'products/image/favicon.ico', permanent=True)
 
 
 # --- Sitemaps for SEO ---

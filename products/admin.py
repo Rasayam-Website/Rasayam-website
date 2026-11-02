@@ -1,4 +1,9 @@
 from django.db import transaction
+from django.core.cache import cache
+
+def _clear_cache():
+    """Clear cached pages so admin catalog updates appear immediately."""
+    cache.clear()
 # products/admin.py
 from django.contrib import admin
 from django.utils.html import format_html
@@ -78,9 +83,7 @@ class BannerAdmin(ModelAdmin):
         self._clear_page_cache()
 
     def _clear_page_cache(self):
-        """Clear the cached index page so new banners appear immediately."""
-        from django.core.cache import cache
-        cache.clear()
+        _clear_cache()
 
 @admin.register(PromoBox)
 class PromoBoxAdmin(ModelAdmin):
@@ -96,9 +99,7 @@ class PromoBoxAdmin(ModelAdmin):
         self._clear_page_cache()
 
     def _clear_page_cache(self):
-        """Clear the cached index/shop pages so new promos appear immediately."""
-        from django.core.cache import cache
-        cache.clear()
+        _clear_cache()
 
 @admin.register(Category)
 class CategoryAdmin(ModelAdmin):
